@@ -1,3 +1,5 @@
+SUBDIRS = test
+
 bin_PROGRAMS = loolwsd
 
 dist_bin_SCRIPTS = loolwsd-systemplate-setup
@@ -36,5 +38,4 @@ all-local: loolwsd
 	fi
 
 tags:
-	ctags --c++-kinds=+p --fields=+iaS --extra=+q -R --totals=yes \
-		--exclude=jails *
+	ctags --c++-kinds=+p --fields=+iaS --extra=+q -R --totals=yes *

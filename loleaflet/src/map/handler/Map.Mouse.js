@@ -37,8 +37,7 @@ L.Map.Mouse = L.Handler.extend({
 
 	_onMouseEvent: function (e) {
 		var docLayer = this._map._docLayer;
-		if (!docLayer) {
-			// document not yet loaded
+		if (!docLayer || (this._map.slideShow && this._map.slideShow.fullscreen)) {
 			return;
 		}
 		if (docLayer._graphicMarker && docLayer._graphicMarker.isDragged) {

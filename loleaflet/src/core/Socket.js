@@ -22,6 +22,7 @@ L.Socket = {
 	close: function () {
 		this.socket.onerror = function () {};
 		this.socket.onclose = function () {};
+		this.socket.onmessage = function () {};
 		this.socket.close();
 	},
 
@@ -195,6 +196,18 @@ L.Socket = {
 			}
 			else if (tokens[i].substring(0, 5) === 'kind=') {
 				command.errorKind = tokens[i].substring(5);
+			}
+			else if (tokens[i].substring(0, 5) === 'jail=') {
+				command.jail = tokens[i].substring(5);
+			}
+			else if (tokens[i].substring(0, 4) === 'dir=') {
+				command.dir = tokens[i].substring(4);
+			}
+			else if (tokens[i].substring(0, 5) === 'name=') {
+				command.name = tokens[i].substring(5);
+			}
+			else if (tokens[i].substring(0, 5) === 'port=') {
+				command.port = tokens[i].substring(5);
 			}
 		}
 		if (command.tileWidth && command.tileHeight && this._map._docLayer) {

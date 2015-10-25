@@ -30,6 +30,7 @@
 #include <Poco/Types.h>
 
 #include "TileCache.hpp"
+#include "tsqueue.h"
 
 // We have three kinds of Websocket sessions
 // 1) Between the master loolwsd server to the end-user LOOL client
@@ -51,11 +52,11 @@ public:
 
     virtual bool handleInput(const char *buffer, int length) = 0;
 
+    static const std::string jailDocumentURL;
+
 protected:
     LOOLSession(std::shared_ptr<Poco::Net::WebSocket> ws, Kind kind);
     virtual ~LOOLSession();
-
-    static const std::string jailDocumentURL;
 
     const Kind _kind;
 
@@ -117,6 +118,12 @@ public:
 
     virtual bool getPartPageRectangles(const char *buffer, int length) override;
 
+    /**
+     * Return the URL of the saved-as document when it's ready. If called
+     * before it's ready, the call blocks till then.
+     */
+    std::string getSaveAs();
+
  protected:
     bool invalidateTiles(const char *buffer, int length, Poco::StringTokenizer& tokens);
 
@@ -151,12 +158,14 @@ private:
     static std::mutex _rngMutex;
     int _curPart;
     int _loadPart;
+    /// Kind::ToClient instances store URLs of completed 'save as' documents.
+    tsqueue<std::string> _saveAsQueue;
 };
 
 class ChildProcessSession final : public LOOLSession
 {
 public:
-    ChildProcessSession(std::shared_ptr<Poco::Net::WebSocket> ws, LibreOfficeKit *loKit);
+    ChildProcessSession(std::shared_ptr<Poco::Net::WebSocket> ws, LibreOfficeKit *loKit, std::string _childId);
     virtual ~ChildProcessSession();
 
     virtual bool handleInput(const char *buffer, int length) override;
@@ -175,7 +184,10 @@ public:
 
     virtual void sendTile(const char *buffer, int length, Poco::StringTokenizer& tokens);
 
+    bool downloadAs(const char *buffer, int length, Poco::StringTokenizer& tokens);
+    bool getChildId();
     bool getTextSelection(const char *buffer, int length, Poco::StringTokenizer& tokens);
+    bool insertFile(const char *buffer, int length, Poco::StringTokenizer& tokens);
     bool keyEvent(const char *buffer, int length, Poco::StringTokenizer& tokens);
     bool mouseEvent(const char *buffer, int length, Poco::StringTokenizer& tokens);
     bool unoCommand(const char *buffer, int length, Poco::StringTokenizer& tokens);
@@ -186,9 +198,9 @@ public:
     bool setClientPart(const char *buffer, int length, Poco::StringTokenizer& tokens);
     bool setPage(const char *buffer, int length, Poco::StringTokenizer& tokens);
 
-    std::string _jail;
     std::string _loSubPath;
     LibreOfficeKit *_loKit;
+    std::string _childId;
 
  private:
     int _clientPart;

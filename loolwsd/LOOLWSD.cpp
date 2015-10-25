@@ -41,6 +41,7 @@ DEALINGS IN THE SOFTWARE.
 // number of child processes, each which handles a viewing (editing) session for one document.
 
 #include <errno.h>
+#include <locale.h>
 #include <pwd.h>
 #include <unistd.h>
 
@@ -66,6 +67,7 @@ DEALINGS IN THE SOFTWARE.
 
 #include <Poco/Exception.h>
 #include <Poco/File.h>
+#include <Poco/Net/HTMLForm.h>
 #include <Poco/Net/HTTPClientSession.h>
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Net/HTTPRequestHandler.h>
@@ -75,7 +77,9 @@ DEALINGS IN THE SOFTWARE.
 #include <Poco/Net/HTTPServerParams.h>
 #include <Poco/Net/HTTPServerRequest.h>
 #include <Poco/Net/HTTPServerResponse.h>
+#include <Poco/Net/MessageHeader.h>
 #include <Poco/Net/NetException.h>
+#include <Poco/Net/PartHandler.h>
 #include <Poco/Net/ServerSocket.h>
 #include <Poco/Net/SocketAddress.h>
 #include <Poco/Net/WebSocket.h>
@@ -94,6 +98,8 @@ DEALINGS IN THE SOFTWARE.
 #include <Poco/ThreadLocal.h>
 #include <Poco/NamedMutex.h>
 #include <Poco/FileStream.h>
+#include <Poco/TemporaryFile.h>
+#include <Poco/StreamCopier.h>
 
 
 #include "LOOLProtocol.hpp"
@@ -175,11 +181,48 @@ private:
     tsqueue<std::string>& _queue;
 };
 
-class WebSocketRequestHandler: public HTTPRequestHandler
-    /// Handle a WebSocket connection.
+/// Handles the filename part of the convert-to POST request payload.
+class ConvertToPartHandler : public Poco::Net::PartHandler
+{
+    std::string& _filename;
+public:
+    ConvertToPartHandler(std::string& filename)
+        : _filename(filename)
+    {
+    }
+
+    virtual void handlePart(const Poco::Net::MessageHeader& header, std::istream& stream) override
+    {
+        // Extract filename and put it to a temporary directory.
+        std::string disp;
+        Poco::Net::NameValueCollection params;
+        if (header.has("Content-Disposition"))
+        {
+            std::string cd = header.get("Content-Disposition");
+            Poco::Net::MessageHeader::splitParameters(cd, disp, params);
+        }
+
+        if (!params.has("filename"))
+            return;
+
+        Path tempPath = Path::forDirectory(Poco::TemporaryFile().tempName() + Path::separator());
+        File(tempPath).createDirectories();
+        tempPath.setFileName(params.get("filename"));
+        _filename = tempPath.toString();
+
+        // Copy the stream to _filename.
+        std::ofstream fileStream;
+        fileStream.open(_filename);
+        Poco::StreamCopier::copyStream(stream, fileStream);
+        fileStream.close();
+    }
+};
+
+class RequestHandler: public HTTPRequestHandler
+    /// Handle a WebSocket connection or a simple HTTP request.
 {
 public:
-    WebSocketRequestHandler()
+    RequestHandler()
     {
     }
 
@@ -198,9 +241,109 @@ public:
 
         if(!(request.find("Upgrade") != request.end() && Poco::icompare(request["Upgrade"], "websocket") == 0))
         {
-            response.setStatusAndReason(HTTPResponse::HTTP_BAD_REQUEST);
-            response.setContentLength(0);
-            response.send();
+            StringTokenizer tokens(request.getURI(), "/?");
+            if (tokens.count() >= 2 && tokens[1] == "convert-to")
+            {
+                std::string fromPath;
+                ConvertToPartHandler handler(fromPath);
+                Poco::Net::HTMLForm form(request, request.stream(), handler);
+                std::string format;
+                if (form.has("format"))
+                    format = form.get("format");
+
+                if (!fromPath.empty() && !format.empty())
+                {
+                    // Load the document.
+                    std::shared_ptr<WebSocket> ws;
+                    LOOLSession::Kind kind = LOOLSession::Kind::ToClient;
+                    std::shared_ptr<MasterProcessSession> session(new MasterProcessSession(ws, kind));
+                    const std::string filePrefix("file://");
+                    std::string load = "load url=" + filePrefix + fromPath;
+                    session->handleInput(load.data(), load.size());
+
+                    // Convert it to the requested format.
+                    Path toPath(fromPath);
+                    toPath.setExtension(format);
+                    std::string toJailURL = filePrefix + LOOLSession::jailDocumentURL + Path::separator() + toPath.getFileName();
+                    std::string saveas = "saveas url=" + toJailURL + " format=" + format + " options=";
+                    session->handleInput(saveas.data(), saveas.size());
+                    std::string toURL = session->getSaveAs();
+
+                    // Send it back to the client.
+                    std::string mimeType = "application/octet-stream";
+                    if (toURL.find(filePrefix) == 0)
+                        toURL = toURL.substr(filePrefix.length());
+                    response.sendFile(toURL, mimeType);
+                }
+                else
+                {
+                    response.setStatus(HTTPResponse::HTTP_BAD_REQUEST);
+                    response.setContentLength(0);
+                    response.send();
+                }
+
+                // Clean up the temporary directory the HTMLForm ctor created.
+                Path tempDirectory(fromPath);
+                tempDirectory.setFileName("");
+                File(tempDirectory).remove(/*recursive=*/true);
+            }
+            else if (tokens.count() >= 2 && tokens[1] == "insertfile")
+            {
+                response.set("Access-Control-Allow-Origin", "*");
+                response.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+                response.set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+
+                std::string tmpPath;
+                ConvertToPartHandler handler(tmpPath);
+                Poco::Net::HTMLForm form(request, request.stream(), handler);
+                if (form.has("childid") && form.has("name"))
+                {
+                    std::string dirPath = LOOLWSD::childRoot + Path::separator() + form.get("childid") + LOOLSession::jailDocumentURL +
+                        Path::separator() + "insertfile";
+                    File(dirPath).createDirectory();
+                    std::string fileName = dirPath + Path::separator() + form.get("name");
+                    File(tmpPath).moveTo(fileName);
+
+                    response.setStatus(HTTPResponse::HTTP_OK);
+                    response.send();
+                }
+                else
+                {
+                    response.setStatus(HTTPResponse::HTTP_BAD_REQUEST);
+                    response.send();
+                }
+            }
+            else if (tokens.count() >= 4)
+            {
+                // The user might request a file to download
+                std::string dirPath = LOOLWSD::childRoot + "/" + tokens[1] + LOOLSession::jailDocumentURL + "/" + tokens[2];
+                std::string filePath = dirPath + "/" + tokens[3];
+                std::cout << Util::logPrefix() << "HTTP request for: " << filePath << std::endl;
+                File file(filePath);
+                if (file.exists())
+                {
+                    response.set("Access-Control-Allow-Origin", "*");
+                    Poco::Net::HTMLForm form(request);
+                    std::string mimeType = "application/octet-stream";
+                    if (form.has("mime_type"))
+                        mimeType = form.get("mime_type");
+                    response.sendFile(filePath, mimeType);
+                    File dir(dirPath);
+                    dir.remove(true);
+                }
+                else
+                {
+                    response.setStatus(HTTPResponse::HTTP_NOT_FOUND);
+                    response.setContentLength(0);
+                    response.send();
+                }
+            }
+            else
+            {
+                response.setStatus(HTTPResponse::HTTP_BAD_REQUEST);
+                response.setContentLength(0);
+                response.send();
+            }
             return;
         }
 
@@ -239,7 +382,7 @@ public:
                 ws->setReceiveTimeout(0);
                 do
                 {
-                    char buffer[100000];
+                    char buffer[200000];
                     n = ws->receiveFrame(buffer, sizeof(buffer), flags);
 
                     if (n > 0 && (flags & WebSocket::FRAME_OP_BITMASK) != WebSocket::FRAME_OP_CLOSE)
@@ -293,7 +436,7 @@ public:
             }
             catch (WebSocketException& exc)
             {
-                Application::instance().logger().error(Util::logPrefix() + "WebSocketException: " + exc.message());
+                Application::instance().logger().error(Util::logPrefix() + "RequestHandler::handleRequest(), WebSocketException: " + exc.message());
                 switch (exc.code())
                 {
                 case WebSocket::WS_ERR_HANDSHAKE_UNSUPPORTED_VERSION:
@@ -340,7 +483,7 @@ public:
         }
 
         Application::instance().logger().information(line);
-        return new WebSocketRequestHandler();
+        return new RequestHandler();
     }
 };
 
@@ -361,7 +504,7 @@ public:
         {
             do
             {
-                char buffer[100000];
+                char buffer[200000];
                 n = _ws.receiveFrame(buffer, sizeof(buffer), flags);
 
                 if (n > 0 && (flags & WebSocket::FRAME_OP_BITMASK) != WebSocket::FRAME_OP_CLOSE)
@@ -376,7 +519,7 @@ public:
         }
         catch (WebSocketException& exc)
         {
-            Application::instance().logger().error(Util::logPrefix() + "WebSocketException: " + exc.message());
+            Application::instance().logger().error(Util::logPrefix() + "TestOutput::run(), WebSocketException: " + exc.message());
             _ws.close();
         }
     }
@@ -587,9 +730,9 @@ namespace
     ThreadLocal<Path> destinationForLinkOrCopy;
 
     int linkOrCopyFunction(const char *fpath,
-                           const struct stat *sb,
+                           const struct stat* /*sb*/,
                            int typeflag,
-                           struct FTW *ftwbuf)
+                           struct FTW* /*ftwbuf*/)
     {
         if (strcmp(fpath, sourceForLinkOrCopy->c_str()) == 0)
             return 0;
@@ -777,7 +920,7 @@ void LOOLWSD::componentMain()
         HTTPResponse response;
         std::shared_ptr<WebSocket> ws(new WebSocket(cs, request, response));
 
-        std::shared_ptr<ChildProcessSession> session(new ChildProcessSession(ws, loKit));
+        std::shared_ptr<ChildProcessSession> session(new ChildProcessSession(ws, loKit, std::to_string(_childId)));
 
         ws->setReceiveTimeout(0);
 
@@ -1046,8 +1189,14 @@ void LOOLWSD::startupDesktop(int nDesktops)
     }
 }
 
-int LOOLWSD::main(const std::vector<std::string>& args)
+int LOOLWSD::main(const std::vector<std::string>& /*args*/)
 {
+#ifdef __linux
+    char *locale = setlocale(LC_ALL, NULL);
+    if (locale == NULL || std::strcmp(locale, "C") == 0)
+        setlocale(LC_ALL, "en_US.utf8");
+#endif
+
     if (access(cache.c_str(), R_OK | W_OK | X_OK) != 0)
     {
         std::cout << "Unable to access " << cache <<

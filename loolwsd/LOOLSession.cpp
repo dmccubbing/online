@@ -106,7 +106,8 @@ LOOLSession::LOOLSession(std::shared_ptr<WebSocket> ws, Kind kind) :
 LOOLSession::~LOOLSession()
 {
     std::cout << Util::logPrefix() << "LOOLSession dtor this=" << this << " " << _kind << std::endl;
-    Util::shutdownWebSocket(*_ws);
+    if (_ws)
+        Util::shutdownWebSocket(*_ws);
 }
 
 void LOOLSession::sendTextFrame(const std::string& text)
@@ -123,10 +124,12 @@ void LOOLSession::sendBinaryFrame(const char *buffer, int length)
     if (length > 1000)
     {
         std::string nextmessage = "nextmessage: size=" + std::to_string(length);
-        _ws->sendFrame(nextmessage.data(), nextmessage.size());
+        if (_ws)
+            _ws->sendFrame(nextmessage.data(), nextmessage.size());
     }
 
-    _ws->sendFrame(buffer, length, WebSocket::FRAME_BINARY);
+    if (_ws)
+        _ws->sendFrame(buffer, length, WebSocket::FRAME_BINARY);
 }
 
 std::map<Process::PID, UInt64> MasterProcessSession::_childProcesses;
@@ -149,7 +152,8 @@ MasterProcessSession::MasterProcessSession(std::shared_ptr<WebSocket> ws, Kind k
 MasterProcessSession::~MasterProcessSession()
 {
     std::cout << Util::logPrefix() << "MasterProcessSession dtor this=" << this << " _peer=" << _peer.lock().get() << std::endl;
-    Util::shutdownWebSocket(*_ws);
+    if (_ws)
+        Util::shutdownWebSocket(*_ws);
     auto peer = _peer.lock();
     if (_kind == Kind::ToClient && peer)
     {
@@ -178,6 +182,30 @@ bool MasterProcessSession::handleInput(const char *buffer, int length)
                 tokens.count() == 2 &&
                 getTokenInteger(tokens[1], "part", _curPart))
             {
+                return true;
+            }
+
+            if (tokens.count() == 2 && tokens[0] == "saveas:")
+            {
+                std::string url;
+                if (!getTokenString(tokens[1], "url", url))
+                    return true;
+
+                if (peer)
+                {
+                    // Save as completed, inform the other (Kind::ToClient)
+                    // MasterProcessSession about it.
+
+                    const std::string filePrefix("file:///");
+                    if (url.find(filePrefix) == 0)
+                    {
+                        // Rewrite file:// URLs, as they are visible to the outside world.
+                        Path path(MasterProcessSession::getJailPath(_childId), url.substr(filePrefix.length()));
+                        url = filePrefix + path.toString().substr(1);
+                    }
+                    peer->_saveAsQueue.put(url);
+                }
+
                 return true;
             }
         }
@@ -290,11 +318,14 @@ bool MasterProcessSession::handleInput(const char *buffer, int length)
     }
     else if (tokens[0] != "canceltiles" &&
              tokens[0] != "commandvalues" &&
-             tokens[0] != "partpagerectangles" &&
+             tokens[0] != "downloadas" &&
+             tokens[0] != "getchildid" &&
              tokens[0] != "gettextselection" &&
+             tokens[0] != "insertfile" &&
              tokens[0] != "invalidatetiles" &&
              tokens[0] != "key" &&
              tokens[0] != "mouse" &&
+             tokens[0] != "partpagerectangles" &&
              tokens[0] != "requestloksession" &&
              tokens[0] != "resetselection" &&
              tokens[0] != "saveas" &&
@@ -369,7 +400,7 @@ Path MasterProcessSession::getJailPath(UInt64 childId)
     return Path::forDirectory(LOOLWSD::childRoot + Path::separator() + std::to_string(childId));
 }
 
-bool MasterProcessSession::invalidateTiles(const char *buffer, int length, StringTokenizer& tokens)
+bool MasterProcessSession::invalidateTiles(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
 {
     int part, tilePosX, tilePosY, tileWidth, tileHeight;
 
@@ -392,7 +423,7 @@ bool MasterProcessSession::invalidateTiles(const char *buffer, int length, Strin
     return true;
 }
 
-bool MasterProcessSession::loadDocument(const char *buffer, int length, StringTokenizer& tokens)
+bool MasterProcessSession::loadDocument(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
 {
     if (tokens.count() < 2 || tokens.count() > 4)
     {
@@ -479,6 +510,11 @@ bool MasterProcessSession::getPartPageRectangles(const char *buffer, int length)
         dispatchChild();
     forwardToPeer(buffer, length);
     return true;
+}
+
+std::string MasterProcessSession::getSaveAs()
+{
+    return _saveAsQueue.get();
 }
 
 void MasterProcessSession::sendTile(const char *buffer, int length, StringTokenizer& tokens)
@@ -632,10 +668,11 @@ void MasterProcessSession::forwardToPeer(const char *buffer, int length)
     peer->sendBinaryFrame(buffer, length);
 }
 
-ChildProcessSession::ChildProcessSession(std::shared_ptr<WebSocket> ws, LibreOfficeKit *loKit) :
+ChildProcessSession::ChildProcessSession(std::shared_ptr<WebSocket> ws, LibreOfficeKit *loKit, std::string childId) :
     LOOLSession(ws, Kind::ToMaster),
     _loKitDocument(NULL),
     _loKit(loKit),
+    _childId(childId),
     _clientPart(0)
 {
     std::cout << Util::logPrefix() << "ChildProcessSession ctor this=" << this << " ws=" << _ws.get() << std::endl;
@@ -699,7 +736,10 @@ bool ChildProcessSession::handleInput(const char *buffer, int length)
         // All other commands are such that they always require a LibreOfficeKitDocument session,
         // i.e. need to be handled in a child process.
 
-        assert(tokens[0] == "gettextselection" ||
+        assert(tokens[0] == "downloadas" ||
+               tokens[0] == "getchildid" ||
+               tokens[0] == "gettextselection" ||
+               tokens[0] == "insertfile" ||
                tokens[0] == "key" ||
                tokens[0] == "mouse" ||
                tokens[0] == "uno" ||
@@ -712,9 +752,21 @@ bool ChildProcessSession::handleInput(const char *buffer, int length)
         {
             _loKitDocument->pClass->setPart(_loKitDocument, _clientPart);
         }
-        if (tokens[0] == "gettextselection")
+        if (tokens[0] == "getchildid")
+        {
+            return getChildId();
+        }
+        else if (tokens[0] == "downloadas")
+        {
+            return downloadAs(buffer, length, tokens);
+        }
+        else if (tokens[0] == "gettextselection")
         {
             return getTextSelection(buffer, length, tokens);
+        }
+        else if (tokens[0] == "insertfile")
+        {
+            return insertFile(buffer, length, tokens);
         }
         else if (tokens[0] == "key")
         {
@@ -808,9 +860,6 @@ extern "C"
         case LOK_CALLBACK_HYPERLINK_CLICKED:
             srv->sendTextFrame("hyperlinkclicked: " + std::string(pPayload));
             break;
-        case LOK_CALLBACK_SEARCH_RESULT_COUNT:
-            srv->sendTextFrame("searchresultcount: " + std::string(pPayload));
-            break;
         case LOK_CALLBACK_STATE_CHANGED:
             srv->sendTextFrame("statechanged: " + std::string(pPayload));
             break;
@@ -825,6 +874,9 @@ extern "C"
             break;
         case LOK_CALLBACK_SEARCH_NOT_FOUND:
             srv->sendTextFrame("searchnotfound: " + std::string(pPayload));
+            break;
+        case LOK_CALLBACK_SEARCH_RESULT_SELECTION:
+            srv->sendTextFrame("searchresultselection: " + std::string(pPayload));
             break;
         case LOK_CALLBACK_DOCUMENT_SIZE_CHANGED:
             srv->getStatus("", 0);
@@ -905,7 +957,7 @@ bool ChildProcessSession::loadDocument(const char *buffer, int length, StringTok
     return true;
 }
 
-bool ChildProcessSession::getStatus(const char *buffer, int length)
+bool ChildProcessSession::getStatus(const char* /*buffer*/, int /*length*/)
 {
     std::string status = "status: " + LOKitHelper::documentStatus(_loKitDocument);
     StringTokenizer tokens(status, " ", StringTokenizer::TOK_IGNORE_EMPTY | StringTokenizer::TOK_TRIM);
@@ -918,7 +970,7 @@ bool ChildProcessSession::getStatus(const char *buffer, int length)
     return true;
 }
 
-bool ChildProcessSession::getCommandValues(const char *buffer, int length, StringTokenizer& tokens)
+bool ChildProcessSession::getCommandValues(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
 {
     std::string command;
     if (tokens.count() != 2 || !getTokenString(tokens[1], "command", command))
@@ -936,7 +988,7 @@ bool ChildProcessSession::getPartPageRectangles(const char* /*buffer*/, int /*le
     return true;
 }
 
-void ChildProcessSession::sendTile(const char *buffer, int length, StringTokenizer& tokens)
+void ChildProcessSession::sendTile(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
 {
     int part, width, height, tilePosX, tilePosY, tileWidth, tileHeight;
 
@@ -989,7 +1041,56 @@ void ChildProcessSession::sendTile(const char *buffer, int length, StringTokeniz
     sendBinaryFrame(output.data(), output.size());
 }
 
-bool ChildProcessSession::getTextSelection(const char *buffer, int length, StringTokenizer& tokens)
+bool ChildProcessSession::downloadAs(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
+{
+    std::string name, id, format, filterOptions;
+
+    if (tokens.count() < 5 ||
+        !getTokenString(tokens[1], "name", name) ||
+        !getTokenString(tokens[2], "id", id))
+    {
+        sendTextFrame("error: cmd=downloadas kind=syntax");
+        return false;
+    }
+
+    getTokenString(tokens[3], "format", format);
+
+    if (getTokenString(tokens[4], "options", filterOptions)) {
+        if (tokens.count() > 5) {
+            filterOptions += Poco::cat(std::string(" "), tokens.begin() + 5, tokens.end());
+        }
+    }
+
+    std::string tmpDir, url;
+    File *file = NULL;
+    do
+    {
+        if (file != NULL)
+        {
+            delete file;
+        }
+        tmpDir = std::to_string((((Poco::UInt64)LOOLWSD::_rng.next()) << 32) | LOOLWSD::_rng.next() | 1);
+        url = jailDocumentURL + "/" + tmpDir + "/" + name;
+        file = new File(url);
+    } while (file->exists());
+    delete file;
+
+    _loKitDocument->pClass->saveAs(_loKitDocument, url.c_str(),
+            format.size() == 0 ? NULL :format.c_str(),
+            filterOptions.size() == 0 ? NULL : filterOptions.c_str());
+
+    sendTextFrame("downloadas: jail=" + _childId + " dir=" + tmpDir + " name=" + name +
+            " port=" + std::to_string(LOOLWSD::portNumber) + " id=" + id);
+    return true;
+}
+
+bool ChildProcessSession::getChildId()
+{
+    sendTextFrame("getchildid: id=" + _childId);
+    return true;
+}
+
+bool ChildProcessSession::getTextSelection(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
 {
     std::string mimeType;
 
@@ -1006,7 +1107,33 @@ bool ChildProcessSession::getTextSelection(const char *buffer, int length, Strin
     return true;
 }
 
-bool ChildProcessSession::keyEvent(const char *buffer, int length, StringTokenizer& tokens)
+bool ChildProcessSession::insertFile(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
+{
+    std::string name, type;
+
+    if (tokens.count() != 3 ||
+        !getTokenString(tokens[1], "name", name),
+        !getTokenString(tokens[2], "type", type))
+    {
+        sendTextFrame("error: cmd=insertfile kind=syntax");
+        return false;
+    }
+
+    if (type == "graphic") {
+        std::string fileName = "file://" + jailDocumentURL + "/insertfile/" + name;
+        std::string command = ".uno:InsertGraphic";
+        std::string arguments = "{"
+            "\"FileName\":{"
+                "\"type\":\"string\","
+                "\"value\":\"" + fileName + "\""
+            "}}";
+        _loKitDocument->pClass->postUnoCommand(_loKitDocument, command.c_str(), arguments.c_str());
+    }
+
+    return true;
+}
+
+bool ChildProcessSession::keyEvent(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
 {
     int type, charcode, keycode;
 
@@ -1026,7 +1153,7 @@ bool ChildProcessSession::keyEvent(const char *buffer, int length, StringTokeniz
     return true;
 }
 
-bool ChildProcessSession::mouseEvent(const char *buffer, int length, StringTokenizer& tokens)
+bool ChildProcessSession::mouseEvent(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
 {
     int type, x, y, count, buttons, modifier;
 
@@ -1051,7 +1178,7 @@ bool ChildProcessSession::mouseEvent(const char *buffer, int length, StringToken
     return true;
 }
 
-bool ChildProcessSession::unoCommand(const char *buffer, int length, StringTokenizer& tokens)
+bool ChildProcessSession::unoCommand(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
 {
     if (tokens.count() == 1)
     {
@@ -1071,7 +1198,7 @@ bool ChildProcessSession::unoCommand(const char *buffer, int length, StringToken
     return true;
 }
 
-bool ChildProcessSession::selectText(const char *buffer, int length, StringTokenizer& tokens)
+bool ChildProcessSession::selectText(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
 {
     int type, x, y;
 
@@ -1093,7 +1220,7 @@ bool ChildProcessSession::selectText(const char *buffer, int length, StringToken
     return true;
 }
 
-bool ChildProcessSession::selectGraphic(const char *buffer, int length, StringTokenizer& tokens)
+bool ChildProcessSession::selectGraphic(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
 {
     int type, x, y;
 
@@ -1114,7 +1241,7 @@ bool ChildProcessSession::selectGraphic(const char *buffer, int length, StringTo
     return true;
 }
 
-bool ChildProcessSession::resetSelection(const char *buffer, int length, StringTokenizer& tokens)
+bool ChildProcessSession::resetSelection(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
 {
     if (tokens.count() != 1)
     {
@@ -1127,7 +1254,7 @@ bool ChildProcessSession::resetSelection(const char *buffer, int length, StringT
     return true;
 }
 
-bool ChildProcessSession::saveAs(const char *buffer, int length, StringTokenizer& tokens)
+bool ChildProcessSession::saveAs(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
 {
     std::string url, format, filterOptions;
 
@@ -1150,10 +1277,12 @@ bool ChildProcessSession::saveAs(const char *buffer, int length, StringTokenizer
             format.size() == 0 ? NULL :format.c_str(),
             filterOptions.size() == 0 ? NULL : filterOptions.c_str());
 
+    sendTextFrame("saveas: url=" + url);
+
     return true;
 }
 
-bool ChildProcessSession::setClientPart(const char *buffer, int length, StringTokenizer& tokens)
+bool ChildProcessSession::setClientPart(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
 {
     if (tokens.count() < 2 ||
         !getTokenInteger(tokens[1], "part", _clientPart))
@@ -1163,7 +1292,7 @@ bool ChildProcessSession::setClientPart(const char *buffer, int length, StringTo
     return true;
 }
 
-bool ChildProcessSession::setPage(const char *buffer, int length, StringTokenizer& tokens)
+bool ChildProcessSession::setPage(const char* /*buffer*/, int /*length*/, StringTokenizer& tokens)
 {
     int page;
     if (tokens.count() < 2 ||

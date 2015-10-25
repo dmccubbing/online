@@ -44,7 +44,12 @@ L.GridLayer = L.Layer.extend({
 		this._container = null;
 		this._tileZoom = null;
 		clearTimeout(this._preFetchIdle);
+		clearTimeout(this._previewInvalidator);
 		clearInterval(this._tilesPreFetcher);
+
+		if (this._selections) {
+			this._map.removeLayer(this._selections);
+		}
 		if (this._cursorMarker) {
 			this._cursorMarker.remove();
 		}
@@ -756,6 +761,34 @@ L.GridLayer = L.Layer.extend({
 		return new L.Point(
 				pixels.x * this._tileWidthTwips / this._tileSize,
 				pixels.y * this._tileHeightTwips / this._tileSize);
+	},
+
+	_twipsRectangleToPixelBounds: function (strRectangle) {
+		// TODO use this more
+		// strRectangle = x, y, width, height
+		var strTwips = strRectangle.match(/\d+/g);
+		if (!strTwips) {
+			return null;
+		}
+		var topLeftTwips = new L.Point(parseInt(strTwips[0]), parseInt(strTwips[1]));
+		var offset = new L.Point(parseInt(strTwips[2]), parseInt(strTwips[3]));
+		var bottomRightTwips = topLeftTwips.add(offset);
+		return new L.Bounds(
+				this._twipsToPixels(topLeftTwips),
+				this._twipsToPixels(bottomRightTwips));
+	},
+
+	_twipsRectanglesToPixelBounds: function (strRectangles) {
+		// used when we have more rectangles
+		strRectangles = strRectangles.split(';');
+		var boundsList = [];
+		for (var i = 0; i < strRectangles.length; i++) {
+			var bounds = this._twipsRectangleToPixelBounds(strRectangles[i]);
+			if (bounds) {
+				boundsList.push(bounds);
+			}
+		}
+		return boundsList;
 	},
 
 	_noTilesToLoad: function () {

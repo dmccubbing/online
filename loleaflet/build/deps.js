@@ -225,6 +225,21 @@ var deps = {
 		desc: 'Handles mouse interaction with the document.'
 	},
 
+	Print: {
+		src: ['map/handler/Map.Print.js'],
+		desc: 'Handles the print action (ctrl + P).'
+	},
+
+	SlideShow: {
+		src: ['map/handler/Map.SlideShow.js'],
+		desc: 'Creates a presentation slide show.'
+	},
+
+	FileInserter: {
+		src: ['map/handler/Map.FileInserter.js'],
+		desc: 'Handles inserting a file (image) in the document.'
+	},
+
 	MarkerDrag: {
 		src: ['layer/marker/Marker.Drag.js'],
 		deps: ['Marker'],
@@ -243,6 +258,13 @@ var deps = {
 		      'control/Control.Search.js'],
 		heading: 'Controls',
 		desc: 'Search control with two buttons (previous / next).'
+	},
+
+	ControlInsertImg: {
+		src: ['control/Control.js',
+		      'control/Control.InsertImg.js'],
+		heading: 'Controls',
+		desc: 'Handles inserting an image in the document.'
 	},
 
 	ControlParts: {

@@ -25,7 +25,8 @@ L.TileLayer = L.GridLayer.extend({
 		zoomReverse: false,
 		detectRetina: false,
 		crossOrigin: false,
-		preFetchOtherParts: false
+		preFetchOtherParts: false,
+		previewInvalidationTimeout: 1000
 	},
 
 	initialize: function (url, options) {
@@ -85,6 +86,9 @@ L.TileLayer = L.GridLayer.extend({
 		this._emptyTilesCount = 0;
 		this._msgQueue = [];
 		this._toolbarCommandValues = {};
+		this._previewInvalidations = [];
+		this._partPageRectanglesTwips = [];
+		this._partPageRectanglesPixels = [];
 	},
 
     onAdd: function (map) {
@@ -185,8 +189,14 @@ L.TileLayer = L.GridLayer.extend({
 		else if (textMsg.startsWith('cursorvisible:')) {
 			this._onCursorVisibleMsg(textMsg);
 		}
+		else if (textMsg.startsWith('downloadas:')) {
+			this._onDownloadAsMsg(textMsg);
+		}
 		else if (textMsg.startsWith('error:')) {
 			this._onErrorMsg(textMsg);
+		}
+		else if (textMsg.startsWith('getchildid:')) {
+			this._onGetChildIdMsg(textMsg);
 		}
 		else if (textMsg.startsWith('graphicselection:')) {
 			this._onGraphicSelectionMsg(textMsg);
@@ -214,8 +224,8 @@ L.TileLayer = L.GridLayer.extend({
 		else if (textMsg.startsWith('searchnotfound:')) {
 			this._onSearchNotFoundMsg(textMsg);
 		}
-		else if (textMsg.startsWith('searchresultcount:')) {
-			this._onSearchResultCount(textMsg);
+		else if (textMsg.startsWith('searchresultselection:')) {
+			this._onSearchResultSelection(textMsg);
 		}
 		else if (textMsg.startsWith('setpart:')) {
 			this._onSetPartMsg(textMsg);
@@ -264,9 +274,40 @@ L.TileLayer = L.GridLayer.extend({
 		this._onUpdateCursor();
 	},
 
+	_onDownloadAsMsg: function (textMsg) {
+		var command = L.Socket.parseServerCmd(textMsg);
+		var parser = document.createElement('a');
+		var protocol = window.location.protocol === 'file:' ? 'http:' : window.location.protocol;
+		parser.href = this._map.options.server;
+		var url = protocol + '//' + parser.hostname + ':' + command.port + '/' +
+			command.jail + '/' + command.dir + '/' + command.name;
+
+		if (command.id === 'print') {
+			var isFirefox = typeof InstallTrigger !== 'undefined' || navigator.userAgent.search('Firefox') >= 0;
+			if (isFirefox || this._map.options.print === false) {
+				// the print dialog doesn't work well on firefox
+				this._map.fire('print', {url: url});
+			}
+			else {
+				this._map.fire('filedownloadready', {url: url, name: name, id: command.id});
+			}
+		}
+		else if (command.id === 'slideshow') {
+			this._map.fire('slidedownloadready', {url: url});
+		}
+		else {
+			this._map._fileDownloader.src = url;
+		}
+	},
+
 	_onErrorMsg: function (textMsg) {
 		var command = L.Socket.parseServerCmd(textMsg);
 		this._map.fire('error', {cmd: command.errorCmd, kind: command.errorKind});
+	},
+
+	_onGetChildIdMsg: function (textMsg) {
+		var command = L.Socket.parseServerCmd(textMsg);
+		this._map.fire('childid', {id: command.id});
 	},
 
 	_onGraphicSelectionMsg: function (textMsg) {
@@ -336,11 +377,19 @@ L.TileLayer = L.GridLayer.extend({
 		this._map.fire('search', {originalPhrase: originalPhrase, count: 0});
 	},
 
-	_onSearchResultCount: function (textMsg) {
-		textMsg = textMsg.substring(19);
-		var count = parseInt(textMsg.substring(0, textMsg.indexOf(';')));
-		var originalPhrase = textMsg.substring(textMsg.indexOf(';') + 1);
-		this._map.fire('search', {originalPhrase: originalPhrase, count: count});
+	_onSearchResultSelection: function (textMsg) {
+		textMsg = textMsg.substring(23);
+		var obj = JSON.parse(textMsg);
+		var originalPhrase = obj.searchString;
+		var count = obj.searchResultSelection.length;
+		var results = [];
+		for (var i = 0; i < obj.searchResultSelection.length; i++) {
+			results.push({
+				part: parseInt(obj.searchResultSelection[i].part),
+				rectangles: this._twipsRectanglesToPixelBounds(obj.searchResultSelection[i].rectangles)
+			});
+		}
+		this._map.fire('search', {originalPhrase: originalPhrase, count: count, results: results});
 	},
 
 	_onStateChangedMsg: function (textMsg) {
@@ -384,16 +433,6 @@ L.TileLayer = L.GridLayer.extend({
 				rectangles.push([bottomLeftTwips, bottomRightTwips, topLeftTwips, topRightTwips]);
 				selectionCenter = selectionCenter.add(topLeftTwips);
 				selectionCenter = selectionCenter.add(offset.divideBy(2));
-			}
-			// average of all rectangles' centers
-			selectionCenter = selectionCenter.divideBy(strTwips.length / 4);
-			selectionCenter = this._twipsToLatLng(selectionCenter);
-			if (!this._map.getBounds().contains(selectionCenter)) {
-				var center = this._map.project(selectionCenter);
-				center = center.subtract(this._map.getSize().divideBy(2));
-				center.x = Math.round(center.x < 0 ? 0 : center.x);
-				center.y = Math.round(center.y < 0 ? 0 : center.y);
-				this._map.fire('scrollto', {x: center.x, y: center.y});
 			}
 
 			var polygons = L.PolyUtil.rectanglesToPolygons(rectangles, this);
@@ -713,7 +752,8 @@ L.TileLayer = L.GridLayer.extend({
 			this._map.fire('error', {msg: 'Oops, no content available yet'});
 		}
 		else {
-			e.clipboardData.setData('text/plain', this._selectionTextContent);
+			// Decode UTF-8.
+			e.clipboardData.setData('text/plain', decodeURIComponent(escape(this._selectionTextContent)));
 		}
 	},
 
@@ -776,6 +816,74 @@ L.TileLayer = L.GridLayer.extend({
 				twipsRectangles: this._partPageRectanglesTwips
 			});
 		}
+	},
+
+    _invalidatePreviews: function () {
+		if (this._map._docPreviews && this._previewInvalidations.length > 0) {
+			var toInvalidate = {};
+			for (var i = 0; i < this._previewInvalidations.length; i++) {
+				var invalidBounds = this._previewInvalidations[i];
+				for (var key in this._map._docPreviews) {
+					// find preview tiles that need to be updated and add them in a set
+					var preview = this._map._docPreviews[key];
+					if (preview.index >= 0 && this._docType === 'text') {
+						// we have a preview for a page
+						if (this._partPageRectanglesTwips.length > preview.index &&
+								invalidBounds.intersects(this._partPageRectanglesTwips[preview.index])) {
+							toInvalidate[key] = true;
+						}
+					}
+					else if (preview.index >= 0) {
+						// we have a preview for a part
+						if (preview.index === this._selectedPart ||
+								(preview.index === this._prevSelectedPart && this._prevSelectedPartNeedsUpdate)) {
+							// if the current part needs its preview updated OR
+							// the part has been changed and we need to update the previous part preview
+							if (preview.index === this._prevSelectedPart) {
+								this._prevSelectedPartNeedsUpdate = false;
+							}
+							toInvalidate[key] = true;
+						}
+					}
+					else {
+						// we have a custom preview
+						var bounds = new L.Bounds(
+								new L.Point(preview.tilePosX, preview.tilePosY),
+								new L.Point(preview.tilePosX + preview.tileWidth, preview.tilePosY + preview.tileHeight));
+						if ((preview.part === this._selectedPart ||
+								(preview.part === this._prevSelectedPart && this._prevSelectedPartNeedsUpdate)) &&
+								invalidBounds.intersects(bounds)) {
+							// if the current part needs its preview updated OR
+							// the part has been changed and we need to update the previous part preview
+							if (preview.index === this._prevSelectedPart) {
+								this._prevSelectedPartNeedsUpdate = false;
+							}
+							toInvalidate[key] = true;
+						}
+
+					}
+				}
+
+			}
+
+			for (key in toInvalidate) {
+				// update invalid preview tiles
+				preview = this._map._docPreviews[key];
+				if (preview.autoUpdate) {
+					if (preview.index >= 0) {
+						this._map.getPreview(preview.id, preview.index, preview.maxWidth, preview.maxHeight, {autoUpdate: true});
+					}
+					else {
+						this._map.getCustomPreview(preview.id, preview.part, preview.width, preview.height, preview.tilePosX,
+								preview.tilePosY, preview.tileWidth, preview.tileHeight, {autoUpdate: true});
+					}
+				}
+				else {
+					this._map.fire('invalidatepreview', {id: preview.id});
+				}
+			}
+		}
+		this._previewInvalidations = [];
 	}
 });
 

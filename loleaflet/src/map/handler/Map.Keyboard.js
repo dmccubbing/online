@@ -180,6 +180,9 @@ L.Map.Keyboard = L.Handler.extend({
 	},
 
 	_onKeyDown: function (e) {
+		if (this._map.slideShow && this._map.slideShow.fullscreen) {
+			return;
+		}
 		var docLayer = this._map._docLayer;
 		this.modifier = 0;
 		var shift = e.originalEvent.shiftKey ? this.keyModifier.shift : 0;
@@ -282,6 +285,9 @@ L.Map.Keyboard = L.Handler.extend({
 				break;
 			case 76: // l
 				L.Socket.sendMessage('uno .uno:LeftPara');
+				break;
+			case 80: // p
+				this._map.print();
 				break;
 			case 82: // r
 				L.Socket.sendMessage('uno .uno:RightPara');

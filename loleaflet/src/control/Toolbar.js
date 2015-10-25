@@ -31,6 +31,25 @@ L.Map.include({
 		return this._docLayer._toolbarCommandValues[command];
 	},
 
+	downloadAs: function (name, format, options, id) {
+		if (format === undefined || format === null) {
+			format = '';
+		}
+		if (options === undefined || options === null) {
+			options = '';
+		}
+		id = id || -1; // not a special download
+		L.Socket.sendMessage('downloadas ' +
+			'name=' + name + ' ' +
+			'id=' + id + ' ' +
+			'format=' + format + ' ' +
+			'options=' + options);
+	},
+
+	print: function () {
+		this.downloadAs('print.pdf', 'pdf', null, 'print');
+	},
+
 	saveAs: function (url, format, options) {
 		if (format === undefined || format === null) {
 			format = '';
@@ -65,5 +84,9 @@ L.Map.include({
 			}
 			L.Socket.sendMessage('uno ' + unoState);
 		}
+	},
+
+	insertFile: function (file) {
+		this.fire('insertfile', {file: file});
 	}
 });
