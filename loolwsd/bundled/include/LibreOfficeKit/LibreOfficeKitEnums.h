@@ -35,6 +35,13 @@ LibreOfficeKitPartMode;
 
 typedef enum
 {
+    LOK_TILEMODE_RGBA,
+    LOK_TILEMODE_BGRA
+}
+LibreOfficeKitTileMode;
+
+typedef enum
+{
     /**
      * Any tiles which are over the rectangle described in the payload are no
      * longer valid.
@@ -180,7 +187,41 @@ typedef enum
      * - searchResultSelection is an array of part-number and rectangle list
      *   pairs, in LOK_CALLBACK_SET_PART / LOK_CALLBACK_TEXT_SELECTION format.
      */
-    LOK_CALLBACK_SEARCH_RESULT_SELECTION
+    LOK_CALLBACK_SEARCH_RESULT_SELECTION,
+
+    /**
+     * Result of the UNO command execution when bNotifyWhenFinished was set
+     * to 'true' during the postUnoCommand() call.
+     *
+     * The result returns a success / failure state, and potentially
+     * additional data:
+     *
+     * {
+     *     "commandName": "...",    // the command for which this is the result
+     *     "success": true/false,   // when the result is "don't know", this is missing
+     *     // TODO "result": "..."  // UNO Any converted to JSON (not implemented yet)
+     * }
+     */
+    LOK_CALLBACK_UNO_COMMAND_RESULT,
+
+    /**
+     * The size and/or the position of the cell cursor changed.
+     *
+     * Rectangle format is the same as LOK_CALLBACK_INVALIDATE_TILES.
+     */
+    LOK_CALLBACK_CELL_CURSOR,
+
+    /**
+     * The current mouse pointer style.
+     *
+     * Payload is a css mouse pointer style.
+     */
+    LOK_CALLBACK_MOUSE_POINTER,
+
+    /**
+     * The text content of the formula bar in Calc.
+     */
+    LOK_CALLBACK_CELL_FORMULA
 }
 LibreOfficeKitCallbackType;
 

@@ -3,9 +3,9 @@
 
 AC_PREREQ([2.69])
 
-AC_INIT([loolwsd], [1.4.1], [libreoffice@collabora.com])
+AC_INIT([loolwsd], [1.5.0], [libreoffice@collabora.com])
 
-AM_INIT_AUTOMAKE([1.11 silent-rules])
+AM_INIT_AUTOMAKE([1.11 silent-rules subdir-objects])
 
 AC_CONFIG_SRCDIR([LOOLWSD.cpp])
 
@@ -13,6 +13,7 @@ AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
 AC_PROG_CXX
+AC_PROG_CC
 
 AC_LANG_PUSH([C++])
 
@@ -62,6 +63,8 @@ AS_IF([test "$enable_debug" = yes],
 
 CXXFLAGS="$CXXFLAGS -std=c++11"
 CXXFLAGS="$CXXFLAGS -Wall -Wextra -Werror"
+AS_IF([test -z "$with_poco_libs"],
+      [CXXFLAGS="$CXXFLAGS -Wshadow"])
 
 AS_IF([test -n "$with_lokit_path"],
       [CPPFLAGS="$CPPFLAGS -I${with_lokit_path}"])

@@ -2,6 +2,7 @@
  * L.Control.Scroll handles scrollbars
  */
 
+/* global $ */
 L.Control.Scroll = L.Control.extend({
 
 	onAdd: function (map) {
@@ -11,6 +12,8 @@ L.Control.Scroll = L.Control.extend({
 
 		map.on('scrollto', this._onScrollTo, this);
 		map.on('scrollby', this._onScrollBy, this);
+		map.on('scrollvelocity', this._onScrollVelocity, this);
+		map.on('handleautoscroll', this._onHandleAutoScroll, this);
 		map.on('docsize', this._onUpdateSize, this);
 		map.on('updatescrolloffset', this._onUpdateScrollOffset, this);
 
@@ -29,7 +32,6 @@ L.Control.Scroll = L.Control.extend({
 				alwaysTriggerOffsets: false
 			}
 		});
-		return document.createElement('div');
 	},
 
 	_onScroll: function (e) {
@@ -50,6 +52,7 @@ L.Control.Scroll = L.Control.extend({
 			this._prevScrollY = -e.mcs.top;
 			this._prevScrollX = -e.mcs.left;
 			this._map.scroll(offset.x, offset.y);
+			this._map.fire('scrolloffset', offset);
 		}
 	},
 
@@ -69,7 +72,44 @@ L.Control.Scroll = L.Control.extend({
 		if (e.y < 0) {
 			y = '-=' + Math.abs(e.y);
 		}
-		$('.scroll-container').mCustomScrollbar('scrollTo', [y, '+=0']);
+		e.x *= (-1);
+		var x = '+=' + e.x;
+		if (e.x < 0) {
+			x = '-=' + Math.abs(e.x);
+		}
+		$('.scroll-container').mCustomScrollbar('scrollTo', [y, x]);
+	},
+
+	_onScrollVelocity: function (e) {
+		if (e.vx === 0 && e.vy === 0) {
+			clearInterval(this._autoScrollTimer);
+			this._autoScrollTimer = null;
+			this._map.isAutoScrolling = false;
+		} else {
+			clearInterval(this._autoScrollTimer);
+			this._map.isAutoScrolling = true;
+			this._autoScrollTimer = setInterval(L.bind(function() {
+				this._onScrollBy({x: e.vx, y: e.vy});
+			}, this), 100);
+		}
+	},
+
+	_onHandleAutoScroll: function (e) {
+		var vx = 0;
+		var vy = 0;
+
+		if (e.pos.y > e.map._size.y - 50) {
+			vy = 50;
+		} else if (e.pos.y < 50) {
+			vy = -50;
+		}
+		if (e.pos.x > e.map._size.x - 50) {
+			vx = 50;
+		} else if (e.pos.x < 50) {
+			vx = -50;
+		}
+
+		this._onScrollVelocity({vx: vx, vy: vy});
 	},
 
 	_onUpdateSize: function (e) {

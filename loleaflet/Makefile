@@ -3,12 +3,13 @@
 # ("micro") part: Between releases odd, even for releases (no other
 # changes inbetween).
 
-VERSION=1.4.1
+VERSION=1.5.0
 
 # Version number of the bundled 'draw' thing
 DRAW_VERSION=0.2.4
 
 all:
+	npm install
 	jake build
 	cd plugins/draw-$(DRAW_VERSION) && jake build
 
@@ -17,7 +18,12 @@ dist: all
 	rm -rf loleaflet-$(VERSION)
 	mkdir loleaflet-$(VERSION)
 	cp README loleaflet-$(VERSION)
-	tar cf - dist plugins/draw-$(DRAW_VERSION)/dist debug/document src/scrollbar | (cd loleaflet-$(VERSION) && tar xf -)
+	cp reference.html loleaflet-$(VERSION)
+	tar cf - dist plugins/draw-$(DRAW_VERSION)/dist debug/document src/scrollbar docs spec \
+		node_modules/mocha/mocha.css \
+		node_modules/mocha/mocha.js \
+		node_modules/happen/happen.js \
+		| (cd loleaflet-$(VERSION) && tar xf -)
 	tar cfz loleaflet-$(VERSION).tar.gz loleaflet-$(VERSION)
 	rm -rf loleaflet-$(VERSION)
 

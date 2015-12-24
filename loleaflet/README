@@ -52,6 +52,25 @@ To see an example:
 and you should see the document in the browser.  In case anything goes wrong,
 check the loolwsd console for the debugging output.
 
+Testing
+-------
+    - to run the unit tests
+        + open sepc/loleaflet.html in the browser
+    - to simulate an editing session and to get the tile loading times
+        + open spec/tilebench.html in the browser
+    - to simulate a client opening several documents in the browser
+        + open spec/loadtest.html in the browser
+    - to simulate a client opening several documents in the console
+        + run: mocha headlessLoadTest.js
+    - to simulate multiple clients opening several documents in the console
+        + run: make load-test
+
+The structure of the unit tests:
+Loleaflet unit tets are located under spec/loleaflet. Following Leaflet's testing style, each test's path
+should mirror the source's path, so spec/loleaflet/control/ToolbarSpec.js tests the features from
+src/control/Toolbar.js . Any new test file needs also to be added in spec/leaflet.html
+
+
 API & events
 ------------
 
@@ -73,7 +92,7 @@ Search:
 Zoom:
     - API:
         map.zoomIn(amount)
-        map.zoomOut(amout)
+        map.zoomOut(amount)
         map.getMinZoom()
         map.getMaxZoom()
     - events:
@@ -96,6 +115,9 @@ Buttons like Bold, Italic, Strike through etc.
             + e.commandName == '.uno:' + 'Bold' | 'Italic' | 'StyleApply' | 'CharFontName' | 'FontHeight' etc.
             + e.state = 'true' | 'false'
             + e.state = fontName | fontSize | styleName
+        map.on('commandresult', function (e) {}) where:
+            + e.commandName == '.uno:' + 'Bold' | 'Italic' | 'StyleApply' | 'CharFontName' | 'FontHeight' etc.
+            + e.success = true | false | undefined
 
 Parts (like slides in presentation, or sheets in spreadsheets):
     - API:
@@ -128,7 +150,7 @@ Parts (like slides in presentation, or sheets in spreadsheets):
         map.on('tilepreview', function (e) {}) where:
             + e.tile - the preview image
             + e.id - the preview id
-            + e.width - widht of the image
+            + e.width - width of the image
             + e.height - height of the image
             + [e.part] - if the preview is for a part
             + e.docType
@@ -158,7 +180,7 @@ Scroll (the following are measured in pixels):
         map.scrollDown(y, options)
             + scroll down by 'y' (or up if negative)
         map.scrollRight(x, options)
-            + scroll right by 'x' (or left if nevative)
+            + scroll right by 'x' (or left if negative)
         map.scrollTop(y, options)
             + scroll to 'y' offset relative to the beginning of the document
         map.scrollLeft(x, options)
@@ -236,22 +258,13 @@ CommandValues:
         map.applyStyle(style, styleFamily)
     - events
         map.on('updatetoolbarcommandvalues', function (e) {}) where
-            + e.commandName = '.uno:StyleAplly', etc
+            + e.commandName = '.uno:StyleApply', etc
             + e.commandValues = a JSON mapping of all possible values for the command
 
 Print:
     - events
         map.on('print', function (e) {}) where
             + e.url = file download url
-Testing
--------
-    - to simulate an editing session and to get the tile loading times
-        + open spec/tilebench.html in the browser
-    - to simulate a client opening several documents in the browser
-        + open spec/loadtest.html in the browser
-    - to simulate a client opening several documents in the console
-        + run: mocha headlessLoadTest.js
-
 
 Contributing
 ------------

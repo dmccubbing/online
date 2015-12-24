@@ -7,6 +7,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="../../dist/leaflet.css">
+<link rel="stylesheet" href="../../dist/selectionMarkers.css">
+<link rel="stylesheet" href="../../dist/loleaflet.css">
+<link rel="stylesheet" href="../../dist/toolbar.css">
+<link rel="stylesheet" href="../../dist/partsPreviewControl.css">
+<link rel="stylesheet" href="../../dist/scrollBar.css">
+<link rel="stylesheet" href="../../dist/searchControl.css">
+<link rel="stylesheet" href="../../dist/tabsControl.css">
 <link rel="stylesheet" href="../../plugins/draw-0.2.4/dist/leaflet.draw.css">
 <link rel="stylesheet" href="../../src/scrollbar/jquery.mCustomScrollbar.css">
 <link rel="stylesheet" href="../../dist/dialog/vex.css" />
@@ -48,7 +55,7 @@
 
     var filePath = getParameterByName('file_path');
     var host = getParameterByName('host');
-    var edit = getParameterByName('edit') === 'true';
+    var permission = getParameterByName('permission');
     var timestamp = getParameterByName('timestamp');
     if (filePath === '') {
         vex.dialog.alert('Wrong file_path, usage: file_path=/path/to/doc/');
@@ -57,12 +64,21 @@
         vex.dialog.alert('Wrong host, usage: host=ws://localhost:9980');
     }
 
+    var renderingOptions = {
+        ".uno:HideWhitespace": {
+            "type": "boolean",
+            "value": "false"
+        }
+    };
+
     var globalMap = L.map('map', {
             doc: filePath,
+            renderingOptions: renderingOptions,
             server: host,
-            edit: edit,
+            permission: permission,
             timestamp: timestamp,
-            readOnly: false
+            documentContainer: 'document-container',
+            toolbarContainer: 'toolbar'
         });
 
     ////// Controls /////
@@ -71,6 +87,7 @@
     globalMap.addControl(L.control.buttons());
     globalMap.addControl(L.control.statusIndicator());
     globalMap.addControl(L.control.scroll());
+    globalMap.addControl(L.control.formulaBar());
     globalMap.addControl(L.control.zoom());
     globalMap.addControl(L.control.parts());
     globalMap.addControl(L.control.search());
@@ -78,5 +95,9 @@
     globalMap.addControl(L.control.dialog());
     globalMap.addControl(L.control.partsPreview());
     globalMap.addControl(L.control.tabs());
+    globalMap.addControl(L.control.columnHeader());
+    globalMap.addControl(L.control.rowHeader());
+    globalMap.addControl(L.control.presentation());
+
     </script>
 </body></html>

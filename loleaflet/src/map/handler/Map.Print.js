@@ -25,7 +25,7 @@ L.Map.Print = L.Handler.extend({
 		// object URL, because else we might have cross origin security problems
 		var xmlHttp = new XMLHttpRequest();
 		xmlHttp.onreadystatechange = L.bind(function () {
-			if (xmlHttp.readyState == 4 && xmlHttp.status == 200) {
+			if (xmlHttp.readyState === 4 && xmlHttp.status === 200) {
 				this._onInitPrint(xmlHttp);
 			}
 		}, this);
@@ -36,8 +36,8 @@ L.Map.Print = L.Handler.extend({
 
 	_onInitPrint: function (e) {
 		var blob = new Blob([e.response], {type: 'application/pdf'});
-		var url = URL.createObjectURL(blob);
-		this._printIframe = L.DomUtil.create('iframe', '', document.body);
+		var url = parent.URL.createObjectURL(blob);
+		this._printIframe = L.DomUtil.create('iframe', '', parent.document.body);
 		this._printIframe.onload = L.bind(this._onIframeLoaded, this);
 		L.DomUtil.setStyle(this._printIframe, 'visibility', 'hidden');
 		L.DomUtil.setStyle(this._printIframe, 'position', 'fixed');

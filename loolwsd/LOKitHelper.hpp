@@ -18,6 +18,7 @@
 
 namespace LOKitHelper
 {
+    inline
     std::string documentTypeToString(LibreOfficeKitDocumentType type)
     {
         switch (type)
@@ -35,6 +36,7 @@ namespace LOKitHelper
         }
     }
 
+    inline
     std::string documentStatus(LibreOfficeKitDocument *loKitDocument)
     {
         std::string typeString(documentTypeToString(static_cast<LibreOfficeKitDocumentType>(loKitDocument->pClass->getDocumentType(loKitDocument))));
@@ -47,8 +49,10 @@ namespace LOKitHelper
                 "current=" + std::to_string(loKitDocument->pClass->getPart(loKitDocument)) + " "
                 "width=" + std::to_string(width) + " "
                 "height=" + std::to_string(height));
-        if (typeString == "spreadsheet" || typeString == "presentation") {
-            for (int i = 0; i < parts; i++) {
+        if (typeString == "spreadsheet" || typeString == "presentation")
+        {
+            for (int i = 0; i < parts; i++)
+            {
                 status += "\n";
                 status += loKitDocument->pClass->getPartName(loKitDocument, i);
             }

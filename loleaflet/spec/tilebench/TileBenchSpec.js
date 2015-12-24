@@ -11,15 +11,24 @@ describe('TileBench', function () {
 		li.style.class = 'test pass';
 		li.innerHTML = '<h2>' + msg + '</h2>';
 		cont.appendChild(li);
-	}
+	};
+
+	var getParameterByName = function (name) {
+		name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+		var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+			results = regex.exec(location.search);
+		return results === null ? "" : results[1].replace(/\+/g, " ");
+	};
 
 	before(function () {
 		var htmlPath = window.location.pathname;
 		var dir = htmlPath.substring(0, htmlPath.lastIndexOf('/'));
 		var fileURL = 'file://' + dir + '/data/eval.odt';
+		fileURL = getParameterByName('file_path') || fileURL;
+		var server = getParameterByName('host') || 'ws://localhost:9980';
 		// initialize the map and load the document
 		map = L.map('map', {
-			server: 'ws://localhost:9980',
+			server: server,
 			doc: fileURL,
 			edit: false,
 			readOnly: false
@@ -43,6 +52,7 @@ describe('TileBench', function () {
 
 	after(function () {
 		map.remove();
+        document.getElementById('document-container').style.visibility = 'hidden';
 	});
 
 	describe('Benchmarking', function () {
@@ -136,6 +146,7 @@ describe('TileBench', function () {
 		done();
 	};
 
+	// since we don't click anywhere, this replay will only work for text documents
 	var keyInput = [
 		[135, 'key type=input char=84 key=0'],
 		[237, 'key type=up char=0 key=16'],

@@ -31,6 +31,10 @@ gettextselection mimetype=<mimeType>
 
     Request selection's content
 
+paste mimetype=<mimeType> data=<data>
+
+    Paste content at the current cursor position.
+
 insertfile name=<name> type=<type>
 
     Inserts the file with the name <name> into the document, we currently support type = 'graphic'
@@ -48,14 +52,23 @@ load <pathname>
 
     Deprecated.
 
-load url=<url> [timestamp=<time>]
+load [part=<partNumber>] url=<url> [timestamp=<time>] [options=<options>]
+
+    part is an optional parameter. <partNumber> is a number.
 
     timestamp is an optional parameter.  <time> is provided in microseconds
     since the Unix epoch - midnight, January 1, 1970.
 
+    options are the whole rest of the line, not URL-encoded
+
 mouse type=<type> x=<x> y=<y> count=<count>
 
     <type> is 'buttondown', 'buttonup' or 'move', others are numbers.
+
+renderfont font=<font>
+
+    requests the rendering of the given font.
+    The font parameter is URL encoded
 
 requestloksession
 
@@ -170,6 +183,10 @@ Websocket connections to the clients) and a child process (handling
 one document through LibreOfficeKit) uses the same protocol, with
 the following additions and changes:
 
+unocommandresult: <payload>
+
+Callback that an UNO command has finished.
+See LOK_CALLBACK_UNO_COMMAND_RESULT for details.
 
 child -> parent
 ===============

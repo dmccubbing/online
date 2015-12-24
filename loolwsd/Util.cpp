@@ -7,9 +7,16 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <sys/poll.h>
+
 #include <cstdlib>
 #include <cstring>
+#include <iomanip>
+#include <sstream>
 #include <string>
+#include <cassert>
+#include <random>
+#include <mutex>
 
 #include <png.h>
 
@@ -24,6 +31,7 @@
 #include <Poco/Util/Application.h>
 
 #include "Util.hpp"
+#include "Png.hpp"
 
 // Callback functions for libpng
 
@@ -48,12 +56,74 @@ extern "C"
 
 namespace Util
 {
+namespace rng
+{
+    static std::random_device _rd;
+    static std::mutex _rngMutex;
+    static std::mt19937_64 _rng = std::mt19937_64(_rd());
+    unsigned getNext()
+    {
+        std::unique_lock<std::mutex> lock(_rngMutex);
+        return _rng();
+    }
+}
+}
+
+namespace Log
+{
+    static std::string binname;
+
+    void initialize(const std::string& name)
+    {
+        binname = name;
+        auto& logger = Poco::Logger::get(name);
+        logger.information("Initializing " + name);
+    }
+
+    Poco::Logger& logger()
+    {
+        return Poco::Logger::get(binname);
+    }
+
+    void debug(const std::string& msg)
+    {
+        return logger().debug(Util::logPrefix() + msg);
+    }
+
+    void info(const std::string& msg)
+    {
+        logger().information(Util::logPrefix() + msg);
+    }
+
+    void error(const std::string& msg)
+    {
+        return logger().error(Util::logPrefix() + msg);
+    }
+}
+
+namespace Util
+{
+    static const Poco::Int64 epochStart = Poco::Timestamp().epochMicroseconds();
 
     std::string logPrefix()
     {
-        Poco::Timestamp timestamp;
-        Poco::Int64 now = timestamp.epochMicroseconds();
-        return std::to_string(Poco::Process::id()) + "," + (Poco::Thread::current() ? std::to_string(Poco::Thread::current()->id()) : "0") + "," + std::to_string(now / 1000) + ",";
+        Poco::Int64 usec = Poco::Timestamp().epochMicroseconds() - epochStart;
+
+        const Poco::Int64 one_s = 1000000;
+        const Poco::Int64 hours = usec / (one_s*60*60);
+        usec %= (one_s*60*60);
+        const Poco::Int64 minutes = usec / (one_s*60);
+        usec %= (one_s*60);
+        const Poco::Int64 seconds = usec / (one_s);
+        usec %= (one_s);
+
+        std::ostringstream stream;
+        stream << Log::binname << ',' << Poco::Process::id() << ',' << std::setw(2) << std::setfill('0')
+               << (Poco::Thread::current() ? Poco::Thread::current()->id() : 0) << ',' << std::setw(2) << ','
+               << hours << ':' << std::setw(2) << minutes << ':' << std::setw(2) << seconds << "." << std::setw(6) << usec
+               << ',';
+
+        return stream.str();
     }
 
     bool windowingAvailable()
@@ -65,7 +135,7 @@ namespace Util
         return false;
     }
 
-    bool encodePNGAndAppendToBuffer(unsigned char *pixmap, int width, int height, std::vector<char>& output)
+    bool encodePNGAndAppendToBuffer(unsigned char *pixmap, int width, int height, std::vector<char>& output, LibreOfficeKitTileMode mode)
     {
         png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
 
@@ -84,12 +154,23 @@ namespace Util
 
         png_write_info(png_ptr, info_ptr);
 
+        switch (mode)
+        {
+        case LOK_TILEMODE_RGBA:
+            break;
+        case LOK_TILEMODE_BGRA:
+            png_set_write_user_transform_fn (png_ptr, unpremultiply_data);
+            break;
+        default:
+            assert(false);
+        }
+
         for (int y = 0; y < height; ++y)
             png_write_row(png_ptr, pixmap + y * width * 4);
 
         png_write_end(png_ptr, info_ptr);
 
-        png_destroy_write_struct(&png_ptr, NULL);
+        png_destroy_write_struct(&png_ptr, &info_ptr);
 
         return true;
     }
@@ -164,6 +245,71 @@ namespace Util
         default:
             return std::to_string(signo);
         }
+    }
+
+    ssize_t writeFIFO(int nPipe, const char* pBuffer, ssize_t nSize)
+    {
+        ssize_t nBytes = -1;
+        ssize_t nCount = 0;
+
+        while(true)
+        {
+            nBytes = write(nPipe, pBuffer + nCount, nSize - nCount);
+            if (nBytes < 0)
+            {
+                if (errno == EINTR || errno == EAGAIN)
+                    continue;
+
+                nCount = -1;
+                break;
+            }
+            else if ( nCount + nBytes < nSize )
+            {
+                nCount += nBytes;
+            }
+            else
+            {
+                nCount = nBytes;
+                break;
+            }
+        }
+
+        return nCount;
+    }
+
+    ssize_t readFIFO(int nPipe, char* pBuffer, ssize_t nSize)
+    {
+        ssize_t nBytes;
+        do
+        {
+            nBytes = read(nPipe, pBuffer, nSize);
+        }
+        while ( nBytes < 0 && errno == EINTR );
+
+        return nBytes;
+    }
+
+    ssize_t readMessage(int nPipe, char* pBuffer, ssize_t nSize)
+    {
+        ssize_t nBytes = -1;
+        struct pollfd aPoll;
+
+        aPoll.fd = nPipe;
+        aPoll.events = POLLIN;
+        aPoll.revents = 0;
+
+        int nPoll = poll(&aPoll, 1, 3000);
+        if ( nPoll < 0 )
+            goto ErrorPoll;
+
+        if ( nPoll == 0 )
+            errno = ETIME;
+
+        if( (aPoll.revents & POLLIN) != 0 )
+            nBytes = readFIFO(nPipe, pBuffer, nSize);
+
+    ErrorPoll:
+        return nBytes;
     }
 }
 

@@ -23,25 +23,65 @@ L.Control.Styles = L.Control.extend({
 		map.off('updatepermission', this._searchResultFound, this);
 	},
 
+	_addSeparator: function () {
+		var item = L.DomUtil.create('option', '', this._container);
+		item.disabled = true;
+		item.value = 'separator';
+		item.innerHTML = '&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;';
+	},
+
 	_initList: function (e) {
 		if (e.commandName === '.uno:StyleApply') {
 			var container = this._container;
 			var first = L.DomUtil.create('option', '', container);
 			first.innerHTML = this.options.info;
+
+			var styles = [];
+			var topStyles = [];
 			if (this._map.getDocType() === 'text') {
-				var styles = e.commandValues['ParagraphStyles'].slice(0, 12);
+				// The list contains a total of 100+ styles, the first 7 are
+				// the default styles (as shown on desktop writer), we then
+				// also show a selection of 12 more styles.
+				styles = e.commandValues.ParagraphStyles.slice(7, 19);
+				topStyles = e.commandValues.ParagraphStyles.slice(0, 7);
 			}
-			else if (this._map.getDocType() === 'presentation') {
-				styles = e.commandValues['Default'];
+			else if (this._map.getDocType() === 'presentation' ||
+				       this._map.getDocType() === 'drawing') {
+				styles = e.commandValues.Default;
 			}
-			else {
-				styles = [];
+			else if (this._map.getDocType() === 'spreadsheet') {
+				styles = e.commandValues.CellStyles;
 			}
-			styles.forEach(function (style) {
-				var item = L.DomUtil.create('option', '', container);
-				item.value = style;
-				item.innerHTML = style;
-			});
+
+			var commands = e.commandValues.Commands;
+			if (commands && commands.length > 0) {
+				this._addSeparator();
+				commands.forEach(function (command) {
+					var item = L.DomUtil.create('option', '', container);
+					item.value = command.id;
+					item.innerHTML = command.text;
+				});
+			}
+
+			if (topStyles.length > 0) {
+				this._addSeparator();
+
+				topStyles.forEach(function (style) {
+					var item = L.DomUtil.create('option', '', container);
+					item.value = style;
+					item.innerHTML = style;
+				});
+			}
+
+			if (styles.length > 0) {
+				this._addSeparator();
+
+				styles.forEach(function (style) {
+					var item = L.DomUtil.create('option', '', container);
+					item.value = style;
+					item.innerHTML = style;
+				});
+			}
 		}
 	},
 
@@ -59,7 +99,10 @@ L.Control.Styles = L.Control.extend({
 		if (style === this.options.info) {
 			return;
 		}
-		if (this._map.getDocType() === 'text') {
+		if (style.startsWith('.uno:')) {
+			this._map.sendUnoCommand(style);
+		}
+		else if (this._map.getDocType() === 'text') {
 			this._map.applyStyle(style, 'ParagraphStyles');
 		}
 		else if (this._map.getDocType() === 'presentation') {

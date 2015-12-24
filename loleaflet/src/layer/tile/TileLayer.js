@@ -26,7 +26,8 @@ L.TileLayer = L.GridLayer.extend({
 		detectRetina: false,
 		crossOrigin: false,
 		preFetchOtherParts: false,
-		previewInvalidationTimeout: 1000
+		previewInvalidationTimeout: 1000,
+		defaultPermission: 'view'
 	},
 
 	initialize: function (url, options) {
@@ -53,17 +54,25 @@ L.TileLayer = L.GridLayer.extend({
 		if (!L.Browser.android) {
 			this.on('tileunload', this._onTileRemove);
 		}
+		// text, presentation, spreadsheet, etc
+		this._docType = options.docType;
 		this._documentInfo = '';
-		// View or edit mode.
-		this._permission = 'view';
+		// View, edit or readonly.
+		this._permission = options.defaultPermission;
 		// Position and size of the visible cursor.
 		this._visibleCursor = new L.LatLngBounds(new L.LatLng(0, 0), new L.LatLng(0, 0));
 		// Cursor overlay is visible or hidden (for blinking).
 		this._isCursorOverlayVisible = false;
 		// Cursor is visible or hidden (e.g. for graphic selection).
 		this._isCursorVisible = true;
+		// Original rectangle graphic selection in twips
+		this._graphicSelectionTwips = new L.Bounds(new L.Point(0, 0), new L.Point(0, 0));
 		// Rectangle graphic selection
 		this._graphicSelection = new L.LatLngBounds(new L.LatLng(0, 0), new L.LatLng(0, 0));
+		// Original rectangle of cell cursor in twips
+		this._cellCursorTwips = new L.Bounds(new L.Point(0, 0), new L.Point(0, 0));
+		// Rectangle for cell cursor
+		this._cellCursor = new L.LatLngBounds(new L.LatLng(0, 0), new L.LatLng(0, 0));
 		// Position and size of the selection start (as if there would be a cursor caret there).
 
 		this._lastValidPart = -1;
@@ -89,6 +98,10 @@ L.TileLayer = L.GridLayer.extend({
 		this._previewInvalidations = [];
 		this._partPageRectanglesTwips = [];
 		this._partPageRectanglesPixels = [];
+		this._clientZoom = 'tilepixelwidth=' + this.options.tileSize + ' ' +
+			'tilepixelheight=' + this.options.tileSize + ' ' +
+			'tiletwipwidth=' + this.options.tileWidthTwips + ' ' +
+			'tiletwipheight=' + this.options.tileHeightTwips;
 	},
 
     onAdd: function (map) {
@@ -105,26 +118,43 @@ L.TileLayer = L.GridLayer.extend({
 		this._viewReset();
 		map.on('drag resize zoomend', this._updateScrollOffset, this);
 		map.on('copy', this._onCopy, this);
+		map.on('paste', this._onPaste, this);
 		map.on('zoomend', this._onUpdateCursor, this);
 		map.on('zoomend', this._onUpdatePartPageRectangles, this);
+		if (this._docType === 'spreadsheet') {
+			map.on('zoomend', this._onCellCursorShift, this);
+		}
+		map.on('zoomend', this._updateClientZoom, this);
 		map.on('dragstart', this._onDragStart, this);
 		map.on('requestloksession', this._onRequestLOKSession, this);
 		map.on('error', this._mapOnError, this);
-		map.on('resize', this._fitDocumentHorizontally, this);
+		if (map.options.autoFitWidth !== false) {
+			map.on('resize', this._fitWidthZoom, this);
+		}
+		// Retrieve the initial cell cursor position (as LOK only sends us an
+		// updated cell cursor when the selected cell is changed and not the initial
+		// cell).
+		map.on('statusindicator',
+			function (e) {
+				if (e.statusType === 'alltilesloaded' && this._docType === 'spreadsheet') {
+					this._onCellCursorShift(true);
+				}
+			},
+		this);
 		for (var key in this._selectionHandles) {
 			this._selectionHandles[key].on('drag dragend', this._onSelectionHandleDrag, this);
 		}
 		this._textArea = map._textArea;
 		this._textArea.focus();
-		if (this.options.readOnly) {
-			map.setPermission('readonly');
-		}
-		else if (this.options.edit) {
-			map.setPermission('edit');
+		if (this.options.permission === 'edit' ||
+				this.options.permission === 'view' ||
+				this.options.permission === 'readonly') {
+			map.setPermission(this.options.permission);
 		}
 		else {
-			map.setPermission('view');
+			map.setPermission(this.options.defaultPermission);
 		}
+
 		map.fire('statusindicator', {statusType: 'loleafletloaded'});
 	},
 
@@ -201,6 +231,12 @@ L.TileLayer = L.GridLayer.extend({
 		else if (textMsg.startsWith('graphicselection:')) {
 			this._onGraphicSelectionMsg(textMsg);
 		}
+		else if (textMsg.startsWith('cellcursor:')) {
+			this._onCellCursorMsg(textMsg);
+		}
+		else if (textMsg.startsWith('cellformula:')) {
+			this._onCellFormulaMsg(textMsg);
+		}
 		else if (textMsg.startsWith('hyperlinkclicked:')) {
 			this._onHyperlinkClickedMsg(textMsg);
 		}
@@ -218,8 +254,14 @@ L.TileLayer = L.GridLayer.extend({
 			msg += 'height=' + this._docHeightTwips;
 			this._onInvalidateTilesMsg(msg);
 		}
+		else if (textMsg.startsWith('mousepointer:')) {
+			this._onMousePointerMsg(textMsg);
+		}
 		else if (textMsg.startsWith('partpagerectangles:')) {
 			this._onPartPageRectanglesMsg(textMsg);
+		}
+		else if (textMsg.startsWith('renderfont:')) {
+			this._onRenderFontMsg(textMsg, img);
 		}
 		else if (textMsg.startsWith('searchnotfound:')) {
 			this._onSearchNotFoundMsg(textMsg);
@@ -254,17 +296,28 @@ L.TileLayer = L.GridLayer.extend({
 		else if (textMsg.startsWith('tile:')) {
 			this._onTileMsg(textMsg, img);
 		}
+		else if (textMsg.startsWith('unocommandresult:')) {
+			this._onUnoCommandResultMsg(textMsg);
+		}
 	},
 
 	_onCommandValuesMsg: function (textMsg) {
 		var obj = JSON.parse(textMsg.substring(textMsg.indexOf('{')));
-		if (this._map.unoToolbarCommands.indexOf(obj.commandName) !== -1) {
+		if (obj.commandName === '.uno:CellCursor') {
+			this._onCellCursorMsg(obj.commandValues);
+		} else if (this._map.unoToolbarCommands.indexOf(obj.commandName) !== -1) {
 			this._toolbarCommandValues[obj.commandName] = obj.commandValues;
 			this._map.fire('updatetoolbarcommandvalues', {
 				commandName: obj.commandName,
 				commandValues: obj.commandValues
 			});
 		}
+	},
+
+	_onCellFormulaMsg: function (textMsg) {
+		var formula = textMsg.substring(13);
+		this._selectionTextContent = formula;
+		this._map.fire('cellformula', {formula: formula});
 	},
 
 	_onCursorVisibleMsg: function(textMsg) {
@@ -312,6 +365,7 @@ L.TileLayer = L.GridLayer.extend({
 
 	_onGraphicSelectionMsg: function (textMsg) {
 		if (textMsg.match('EMPTY')) {
+			this._graphicSelectionTwips = new L.Bounds(new L.Point(0, 0), new L.Point(0, 0));
 			this._graphicSelection = new L.LatLngBounds(new L.LatLng(0, 0), new L.LatLng(0, 0));
 		}
 		else {
@@ -319,12 +373,37 @@ L.TileLayer = L.GridLayer.extend({
 			var topLeftTwips = new L.Point(parseInt(strTwips[0]), parseInt(strTwips[1]));
 			var offset = new L.Point(parseInt(strTwips[2]), parseInt(strTwips[3]));
 			var bottomRightTwips = topLeftTwips.add(offset);
+			this._graphicSelectionTwips = new L.Bounds(topLeftTwips, bottomRightTwips);
 			this._graphicSelection = new L.LatLngBounds(
 							this._twipsToLatLng(topLeftTwips, this._map.getZoom()),
 							this._twipsToLatLng(bottomRightTwips, this._map.getZoom()));
 		}
 
 		this._onUpdateGraphicSelection();
+	},
+
+	_onCellCursorMsg: function (textMsg) {
+		if (textMsg.match('EMPTY')) {
+			this._cellCursorTwips = new L.Bounds(new L.Point(0, 0), new L.Point(0, 0));
+			this._cellCursor = new L.LatLngBounds(new L.LatLng(0, 0), new L.LatLng(0, 0));
+		}
+		else {
+			var strTwips = textMsg.match(/\d+/g);
+			var topLeftTwips = new L.Point(parseInt(strTwips[0]), parseInt(strTwips[1]));
+			var offset = new L.Point(parseInt(strTwips[2]), parseInt(strTwips[3]));
+			var bottomRightTwips = topLeftTwips.add(offset);
+			this._cellCursorTwips = new L.Bounds(topLeftTwips, bottomRightTwips);
+			this._cellCursor = new L.LatLngBounds(
+							this._twipsToLatLng(topLeftTwips, this._map.getZoom()),
+							this._twipsToLatLng(bottomRightTwips, this._map.getZoom()));
+		}
+
+		this._onUpdateCellCursor();
+	},
+
+	_onMousePointerMsg: function (textMsg) {
+		textMsg = textMsg.substring(14); // "mousepointer: "
+		this._map._container.style.cursor = textMsg;
 	},
 
 	_onHyperlinkClickedMsg: function (textMsg) {
@@ -372,6 +451,14 @@ L.TileLayer = L.GridLayer.extend({
 		this._onCurrentPageUpdate();
 	},
 
+	_onRenderFontMsg: function (textMsg, img) {
+		var command = L.Socket.parseServerCmd(textMsg);
+		this._map.fire('renderfont', {
+			font: command.font,
+			img: img
+		});
+	},
+
 	_onSearchNotFoundMsg: function (textMsg) {
 		var originalPhrase = textMsg.substring(16);
 		this._map.fire('search', {originalPhrase: originalPhrase, count: 0});
@@ -403,6 +490,20 @@ L.TileLayer = L.GridLayer.extend({
 			state = unoMsg[1];
 		}
 		this._map.fire('commandstatechanged', {commandName : commandName, state : state});
+	},
+
+	_onUnoCommandResultMsg: function (textMsg) {
+		textMsg = textMsg.substring(18);
+		var obj = JSON.parse(textMsg);
+		var commandName = obj.commandName;
+		if (obj.success === 'true') {
+			var success = true;
+		}
+		else if (obj.success === 'false') {
+			success = false;
+		}
+		// TODO when implemented in the LOK, add also obj.result
+		this._map.fire('commandresult', {commandName: commandName, success: success});
 	},
 
 	_onStatusIndicatorMsg: function (textMsg) {
@@ -558,15 +659,27 @@ L.TileLayer = L.GridLayer.extend({
 		// hide the graphic selection
 		this._graphicSelection = null;
 		this._onUpdateGraphicSelection();
+		this._cellCursor = null;
+		this._onUpdateCellCursor();
 	},
 
 	_postMouseEvent: function(type, x, y, count, buttons, modifier) {
+		if (this._clientZoom) {
+			// the zoom level has changed
+			L.Socket.sendMessage('clientzoom ' + this._clientZoom);
+			this._clientZoom = null;
+		}
 		L.Socket.sendMessage('mouse type=' + type +
 				' x=' + x + ' y=' + y + ' count=' + count +
 				' buttons=' + buttons + ' modifier=' + modifier);
 	},
 
 	_postKeyboardEvent: function(type, charcode, keycode) {
+		if (this._clientZoom) {
+			// the zoom level has changed
+			L.Socket.sendMessage('clientzoom ' + this._clientZoom);
+			this._clientZoom = null;
+		}
 		L.Socket.sendMessage('key type=' + type +
 				' char=' + charcode + ' key=' + keycode);
 	},
@@ -600,7 +713,11 @@ L.TileLayer = L.GridLayer.extend({
 			center = center.subtract(this._map.getSize().divideBy(2));
 			center.x = Math.round(center.x < 0 ? 0 : center.x);
 			center.y = Math.round(center.y < 0 ? 0 : center.y);
-			this._map.fire('scrollto', {x: center.x, y: center.y});
+
+			if (!(this._selectionHandles.start && this._selectionHandles.start.isDragged) &&
+			    !(this._selectionHandles.end && this._selectionHandles.end.isDragged)) {
+				this._map.fire('scrollto', {x: center.x, y: center.y});
+			}
 		}
 
 		if (this._permission === 'edit' && this._isCursorVisible && this._isCursorOverlayVisible
@@ -627,7 +744,9 @@ L.TileLayer = L.GridLayer.extend({
 		var aPos = this._latLngToTwips(e.handle.getLatLng());
 		if (e.type === 'editstart') {
 			this._graphicMarker.isDragged = true;
-			this._postSelectGraphicEvent('start', aPos.x, aPos.y);
+			this._postSelectGraphicEvent('start',
+						Math.min(aPos.x, this._graphicSelectionTwips.max.x - 1),
+						Math.min(aPos.y, this._graphicSelectionTwips.max.y - 1));
 		}
 		else if (e.type === 'editend') {
 			this._postSelectGraphicEvent('end', aPos.x, aPos.y);
@@ -637,15 +756,45 @@ L.TileLayer = L.GridLayer.extend({
 
 	// Update dragged text selection.
 	_onSelectionHandleDrag: function (e) {
-		var aPos = this._latLngToTwips(e.target.getLatLng());
-
 		if (e.type === 'drag') {
 			e.target.isDragged = true;
+
+			// This is rather hacky, but it seems to be the only way to make the
+			// marker follow the mouse cursor if the document is autoscrolled under
+			// us. (This can happen when we're changing the selection if the cursor
+			// moves somewhere that is considered off screen.)
+
+			// Onscreen position of the cursor, i.e. relative to the browser window
+			var boundingrect = e.target._icon.getBoundingClientRect();
+			var cursorPos = L.point(boundingrect.left, boundingrect.top);
+
+			var expectedPos = L.point(e.originalEvent.pageX, e.originalEvent.pageY).subtract(e.target.dragging._draggable.startOffset);
+
+			// If the map has been scrolled, but the cursor hasn't been updated yet, then
+			// the current mouse position differs.
+			if (!expectedPos.equals(cursorPos)) {
+				var correction = expectedPos.subtract(cursorPos);
+
+				e.target.dragging._draggable._startPoint = e.target.dragging._draggable._startPoint.add(correction);
+				e.target.dragging._draggable._startPos = e.target.dragging._draggable._startPos.add(correction);
+				e.target.dragging._draggable._newPos = e.target.dragging._draggable._newPos.add(correction);
+
+				e.target.dragging._draggable._updatePosition();
+			}
+
+			var containerPos = new L.Point(expectedPos.x - this._map._container.getBoundingClientRect().left,
+				expectedPos.y - this._map._container.getBoundingClientRect().top);
+
+			containerPos = containerPos.add(e.target.dragging._draggable.startOffset);
+			this._map.fire('handleautoscroll', {pos: containerPos, map: this._map});
 		}
 		if (e.type === 'dragend') {
 			e.target.isDragged = false;
 			this._textArea.focus();
+			this._map.fire('scrollvelocity', {vx: 0, vy: 0});
 		}
+
+		var aPos = this._latLngToTwips(e.target.getLatLng());
 
 		if (this._selectionHandles.start === e.target) {
 			this._postSelectTextEvent('start', aPos.x, aPos.y);
@@ -675,6 +824,23 @@ L.TileLayer = L.GridLayer.extend({
 			this._graphicMarker.off('editstart editend', this._onGraphicEdit, this);
 			this._map.removeLayer(this._graphicMarker);
 			this._graphicMarker.isDragged = false;
+		}
+	},
+
+	_onUpdateCellCursor: function () {
+		if (this._cellCursor && !this._isEmptyRectangle(this._cellCursor)) {
+			if (this._cellCursorMarker) {
+				this._map.removeLayer(this._cellCursorMarker);
+			}
+			this._cellCursorMarker = L.rectangle(this._cellCursor, {fill: false, color: '#000000', weight: 2});
+			if (!this._cellCursorMarker) {
+				this._map.fire('error', {msg: 'Cell Cursor marker initialization'});
+				return;
+			}
+			this._map.addLayer(this._cellCursorMarker);
+		}
+		else if (this._cellCursorMarker) {
+			this._map.removeLayer(this._cellCursorMarker);
 		}
 	},
 
@@ -728,7 +894,7 @@ L.TileLayer = L.GridLayer.extend({
 			}
 
 			if (!endMarker.isDragged) {
-				var pos = this._map.project(this._textSelectionEnd.getSouthEast());
+				pos = this._map.project(this._textSelectionEnd.getSouthEast());
 				pos = pos.subtract(new L.Point(0, 2));
 				pos = this._map.unproject(pos);
 				endMarker.setLatLng(pos);
@@ -748,13 +914,15 @@ L.TileLayer = L.GridLayer.extend({
 	_onCopy: function (e) {
 		e = e.originalEvent;
 		e.preventDefault();
-		if (!this._selectionTextContent) {
-			this._map.fire('error', {msg: 'Oops, no content available yet'});
+		if (this._selectionTextContent) {
+			e.clipboardData.setData('text/plain', this._selectionTextContent);
 		}
-		else {
-			// Decode UTF-8.
-			e.clipboardData.setData('text/plain', decodeURIComponent(escape(this._selectionTextContent)));
-		}
+	},
+
+	_onPaste: function (e) {
+		e = e.originalEvent;
+		e.preventDefault();
+		L.Socket.sendMessage('paste mimetype=text/plain;charset=utf-8 data=' + e.clipboardData.getData('text/plain'));
 	},
 
 	_onDragStart: function () {
@@ -765,26 +933,29 @@ L.TileLayer = L.GridLayer.extend({
 		L.Socket.sendMessage('requestloksession');
 	},
 
-	_fitDocumentHorizontally: function (e) {
-		if (this._docType !== 'spreadsheet') {
+	_fitWidthZoom: function (e, maxZoom) {
+		var size = e ? e.newSize : this._map.getSize();
+		maxZoom = maxZoom ? maxZoom : this._map.options.zoom;
+		if (this._docType !== 'spreadsheet' || !e) {
+			// If it's not a spreadsheet or the method has been invoked manually
 			var crsScale = this._map.options.crs.scale(1);
-			if (this._docPixelSize.x > e.newSize.x) {
-				var ratio = this._docPixelSize.x / e.newSize.x;
+			if (this._docPixelSize.x > size.x) {
+				var ratio = this._docPixelSize.x / size.x;
 				var zoomDelta = Math.ceil(Math.log(ratio) / Math.log(crsScale));
 				this._map.setZoom(Math.max(1, this._map.getZoom() - zoomDelta), {animate: false});
 			}
-			else if (e.newSize.x / this._docPixelSize.x > crsScale) {
+			else if (size.x / this._docPixelSize.x > crsScale) {
 				// we could zoom in
-				var ratio = e.newSize.x / this._docPixelSize.x;
-				var zoomDelta = Math.ceil(Math.log(ratio) / Math.log(crsScale));
-				this._map.setZoom(Math.min(10, this._map.getZoom() + zoomDelta), {animate: false});
+				ratio = size.x / this._docPixelSize.x;
+				zoomDelta = Math.ceil(Math.log(ratio) / Math.log(crsScale));
+				this._map.setZoom(Math.min(maxZoom, this._map.getZoom() + zoomDelta), {animate: false});
 			}
 		}
 	},
 
 	_onCurrentPageUpdate: function () {
 		var mapCenter = this._map.project(this._map.getCenter());
-		if (!this._partPageRectanglesPixels || !(this._currentPage >= 0) ||
+		if (!this._partPageRectanglesPixels || !(this._currentPage >= 0) || this._currentPage >= this._partPageRectanglesPixels.length ||
 				this._partPageRectanglesPixels[this._currentPage].contains(mapCenter)) {
 			// page number has not changed
 			return;
@@ -815,6 +986,18 @@ L.TileLayer = L.GridLayer.extend({
 				pixelRectangles: this._partPageRectanglesPixels,
 				twipsRectangles: this._partPageRectanglesTwips
 			});
+		}
+	},
+
+	// Cells can change position during changes of zoom level in calc
+	// hence we need to request an updated cell cursor position for this level.
+	_onCellCursorShift: function (force) {
+		if (this._cellCursorMarker || force) {
+			L.Socket.sendMessage('commandvalues command=.uno:CellCursor'
+			                     + '?outputHeight=' + this._tileSize
+			                     + '&outputWidth=' + this._tileSize
+			                     + '&tileHeight=' + this._tileWidthTwips
+			                     + '&tileWidth=' + this._tileHeightTwips);
 		}
 	},
 
@@ -884,6 +1067,13 @@ L.TileLayer = L.GridLayer.extend({
 			}
 		}
 		this._previewInvalidations = [];
+	},
+
+	_updateClientZoom: function () {
+		this._clientZoom = 'tilepixelwidth=' + this._tileSize + ' ' +
+			'tilepixelheight=' + this._tileSize + ' ' +
+			'tiletwipwidth=' + this._tileWidthTwips + ' ' +
+			'tiletwipheight=' + this._tileHeightTwips;
 	}
 });
 

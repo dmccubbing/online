@@ -21,6 +21,7 @@
 	<link href='http://fonts.googleapis.com/css?family=Open+Sans:400,400italic,700,300' rel='stylesheet' type='text/css'>
 
 	<script src="docs/highlight/highlight.pack.js"></script>
+	<script src="docs/js/jquery-2.1.4.min.js"></script>
 	<link rel="stylesheet" href="docs/highlight/styles/github-gist.css" />
 
 </head>
@@ -55,14 +56,16 @@
 		</ul>
 	</div>
 	<div class="toc-col">
-		<h4 style="color:red;">LoLeaflet API</h4>
+		<h4 style="color:red;">LOLeaflet API</h4>
 		<ul>
+			<li><a href="#loleaflet-initialization">Initialization</a></li>
 			<li><a href="#loleaflet-general">General</a></li>
 			<li><a href="#loleaflet-toolbar">Toolbar</a></li>
 			<li><a href="#loleaflet-page">Page oriented</a></li>
 			<li><a href="#loleaflet-part">Part oriented</a></li>
 			<li><a href="#loleaflet-events">Events</a></li>
 			<li><a href="#loleaflet-object-values">Object values</a></li>
+			<li><a href="#loleaflet-uno-commands">Uno commands</a></li>
 		</ul>
 		<h4>UI Layers</h4>
 		<ul>
@@ -1115,7 +1118,7 @@ var map = L.map('map', {
 		<td><code><b>watch</b></code></td>
 		<td><code>Boolean</code></td>
 		<td><code><span class="literal">false</span></code></td>
-		<td>If <code><span class="literal">true</span></code>, starts continous watching of location changes (instead of detecting it once) using W3C <code>watchPosition</code> method. You can later stop watching using <code><b>map.stopLocate</b>()</code> method.</td>
+		<td>If <code><span class="literal">true</span></code>, starts continuous watching of location changes (instead of detecting it once) using W3C <code>watchPosition</code> method. You can later stop watching using <code><b>map.stopLocate</b>()</code> method.</td>
 	</tr>
 	<tr>
 		<td><code><b>setView</b></code></td>
@@ -1390,6 +1393,133 @@ var map = L.map('map', {
 	</tr>
 </table>
 
+<h2 id="loleaflet-initialization">Initialization</h2>
+
+<h3>Usage example</h3>
+
+<pre><code class="javascript">
+var map = L.map('map', {
+    doc: 'file:///path/to/document',
+    server: 'ws://localhost',
+    documentContainer: 'document-container'
+});</code></pre>
+
+<h3 class="left">Creation</h3>
+
+<table data-id='map'>
+	<tr>
+		<th>Factory</th>
+		<th>Description</th>
+	</tr>
+	<tr>
+		<td><code><b>L.map</b>(
+			<nobr>&lt;HTMLElement|String&gt; <i>id</i>,</nobr>
+			<nobr>&lt;<a href="#map-options">Map options</a>&gt; <i>options?</i> )</nobr>
+		</code></td>
+
+
+		<td>Instantiates a map object given a div element (or its id) and optionally an object literal with map options described below.</td>
+	</tr>
+</table>
+
+<h3>Options</h3>
+
+<h4>These are the options intended to be used for loleaflet, using any additional options from Leaflet might cause some
+unexpected behaviour.</h4>
+
+<table data-id='map'>
+	<tr>
+		<th>Option</th>
+		<th>Type</th>
+		<th>Default</th>
+		<th>Description</th>
+	</tr>
+	<tr>
+		<td><code><b>doc</b></code></td>
+		<td><code>String</code></td>
+		<td><code><span class="literal">undefined</span></code></td>
+		<td>Document URL, the server should be able to access the document.</td>
+	</tr>
+	<tr>
+		<td><code><b>server</b></code></td>
+		<td><code>String</code></td>
+		<td><code><span class="literal">undefined</span></code></td>
+		<td>The server hosting loolwsd.</td>
+	</tr>
+	<tr>
+		<td><code><b>permission</b></code></td>
+		<td><code>String</code></td>
+		<td><code><span class="literal">'view'</span></code></td>
+        <td>The document's <a href="#documentpermission-values">permission</a>.</td>
+	</tr>
+	<tr>
+		<td><code><b>timestamp</b></code></td>
+		<td><code>String</code></td>
+		<td><code><span class="literal">undefined</span></code></td>
+		<td>A timestamp of the last modification to the document.</td>
+	</tr>
+	<tr>
+		<td><code><b>documentContainer</b></code></td>
+		<td><code>String / DOM element</code></td>
+		<td><code><span class="literal">undefined</span></code></td>
+		<td>An outer div, containing the map div, that is used internally for the creation of the toolbar.</td>
+	</tr>
+	<tr>
+		<td><code><b>toolbarContainer</b></code></td>
+		<td><code>String / DOM element</code></td>
+		<td><code><span class="literal">undefined</span></code></td>
+		<td>A div used by the default toolbar elements (bold, italic, search, etc.) in loleaflet. If you implement
+           your own toolbar and use controls that do not require a toolbar (like the dialog or scroll control) you
+          can ignore this.</td>
+	</tr>
+	<tr>
+		<td><code><b>renderingOptions</b></code></td>
+		<td><code>Object</code></td>
+		<td><code><span class="literal">undefined</span></code></td>
+		<td>Enables the continous, web view, of the document, see the UNO commands below for this parameter.</td>
+	</tr>
+	<tr>
+		<td><code><b>print</b></code></td>
+		<td><code>Boolean</code></td>
+		<td><code><span class="literal">true</span></code></td>
+		<td>Whether the print handler is active (for Chrome).</td>
+	</tr>
+	<tr>
+		<td><code><b>autoFitWidth</b></code></td>
+		<td><code>Boolean</code></td>
+		<td><code><span class="literal">true</span></code></td>
+		<td>Whether the document is automatically zoomed so that the width fits the viewing area when
+            the window is resized. The document will not be zoomed in more than map.options.zoom.</td>
+	</tr>
+	<tr>
+		<td><code><b>zoom</b></code></td>
+		<td><code>Number</code></td>
+		<td><code><span class="literal">10</span></code></td>
+		<td>Default zoom level in which the document will be loaded.</td>
+	</tr>
+	<tr>
+		<td><code><b>tileWidthTwips</b></code></td>
+		<td><code>Number</code></td>
+		<td><code><span class="literal">3000</span></code></td>
+		<td>Default tile width in twips (how much of the document is covered horizontally in a 256x256 pixels tile).
+            Unless you know what you are doing, this should not be modified.</td>
+	</tr>
+	<tr>
+		<td><code><b>tileHeightTwips</b></code></td>
+		<td><code>Number</code></td>
+		<td><code><span class="literal">3000</span></code></td>
+		<td>Default tile height in twips (how much of the document is covered vertically in a 256x256 pixels tile).
+            Unless you know what you are doing, this should not be modified.</td>
+	</tr>
+	<tr>
+		<td><code><b>defaultZoom</b></code></td>
+		<td><code>Number</code></td>
+		<td><code><span class="literal">10</span></code></td>
+		<td>The zoom level at which the tile size in twips equals the default size (3000 x 3000).
+            Unless you know what you are doing, this should not be modified.</td>
+	</tr>
+</table>
+
 <h2 id="loleaflet-general">General</h2>
 
 <p>General methods for document interaction.</p>
@@ -1415,7 +1545,7 @@ var map = L.map('map', {
 			<nobr>&lt;Boolean&gt; <i>backward?</i> )</nobr>
 		</code></td>
 		<td><code>undefined</code></td>
-		<td>Searches for all occurences of the given phrase.</td>
+		<td>Searches for all occurrences of the given phrase.</td>
 	</tr>
 	<tr>
 		<td><code><b>setPermission</b>(
@@ -1523,7 +1653,14 @@ var map = L.map('map', {
 		<td><code>undfined</code></td>
 		<td>Cancels the automatic update for the preview defined by 'id'.</td>
 	</tr>
-
+	<tr>
+		<td><code><b>fitWidthZoom</b>(
+			<nobr>&lt;Number&gt;<i>maxZoom</i>)</nobr>
+        </code></td>
+		<td><code>undfined</code></td>
+		<td>Zooms in or out so that the document's width fits the viewing area. The document will not zoom in more
+            than `maxZoom` if the parameter is provided.</td>
+	</tr>
 </table>
 
 <h3 id="scroll-options">ScrollOptions</h3>
@@ -1587,7 +1724,7 @@ var map = L.map('map', {
 			<nobr>&lt;String&gt;<i>options?</i>)</nobr>
 		</code></td>
 		<td><code>undefined</code></td>
-        <td>Save the document as "format" at the given url by applying the filter options.</td>
+        <td>Save the document as "format" at the given URL by applying the filter options.</td>
 	</tr>
 	<tr>
 		<td><code><b>downloadAs</b>(
@@ -1601,7 +1738,51 @@ var map = L.map('map', {
 	<tr>
 		<td><code><b>print</b>()</code></td>
 		<td><code>undefined</code></td>
-        <td>Opens the browser's print dialog or promts the user to download a pdf version of the document.</td>
+        <td>Opens the browser's print dialog or prompts the user to download a PDF version of the document.</td>
+	</tr>
+	<tr>
+		<td><code><b>cellEnterString</b>(
+            <nobr>&lt;String&gt;<i>formula</i>)</nobr>
+		<td><code>undefined</code></td>
+        <td>Enters a string of text in the selected cell.</td>
+	</tr>
+	<tr>
+		<td><code><b>insertFile</b>(
+            <nobr>&lt;File&gt;<i>file</i>)</nobr>
+		<td><code>undefined</code></td>
+        <td>Insert a file (graphic) in the document.</td>
+	</tr>
+	<tr>
+		<td><code><b>applyFont</b>(
+            <nobr>&lt;String&gt;<i>fontName</i>)</nobr>
+		<td><code>undefined</code></td>
+        <td>Applies a font.</td>
+	</tr>
+	<tr>
+		<td><code><b>applyFontSize</b>(
+            <nobr>&lt;Number&gt;<i>fontSize</i>)</nobr>
+		<td><code>undefined</code></td>
+        <td>Applies a font size.</td>
+	</tr>
+	<tr>
+		<td><code><b>applyStyle</b>(
+            <nobr>&lt;String&gt;<i>style</i>,</nobr>
+            <nobr>&lt;String&gt;<i>styleFamily</i>)</nobr>
+		<td><code>undefined</code></td>
+        <td>Applies a style from a style family.</td>
+	</tr>
+	<tr>
+		<td><code><b>renderFont</b>(
+            <nobr>&lt;String&gt;<i>fontName</i>)</nobr>
+		<td><code>undefined</code></td>
+        <td>Renders the given font in the smallest rectangle it can fit in.</td>
+	</tr>
+	<tr>
+		<td><code><b>sendUnoCommand</b>(
+			<nobr>&lt;<a href="#loleaflet-uno-commands">String</a>&gt; <i>unoCommand</i>,</nobr>
+			<nobr>&lt;<a href="#loleaflet-uno-commands">Object</a>&gt; <i>param</i>)</nobr>
+		<td><code>undefined</code></td>
+        <td>Sends a <a href="#loleaflet-uno-commands">uno command</a> with the given parameter to LOKit.</td>
 	</tr>
 </table>
 
@@ -1665,6 +1846,309 @@ var map = L.map('map', {
 
 <h2 id="loleaflet-events">Events</h2>
 
+<p>You can subscribe to the following events using <a href="#events">these methods</a>.</p>
+
+<table data-id='map'>
+	<tr>
+		<th>Event</th>
+		<th>Data</th>
+		<th>Description</th>
+	</tr>
+	<tr>
+		<td><code><b>cellformula</b></code></td>
+		<td><code><a href="#cellformula-event">CellFormulaEvent</a></code></td>
+		<td>Fired when the content of the selected cell changes.</td>
+	</tr>
+	<tr>
+		<td><code><b>commandresult</b></code></td>
+		<td><code><a href="#commandresult-event">CommandResultEvent</a></code></td>
+		<td>Fired when a dispatched uno command or the 'saveas' command has finished.</td>
+	</tr>
+	<tr>
+		<td><code><b>commandstatechanged</b></code></td>
+		<td><code><a href="#commandstatechanged-event">CommandStateChangedEvent</a></code></td>
+		<td>Fired when the state of a command such as .uno:Bold changes.</td>
+	</tr>
+	<tr>
+		<td><code><b>docsize</b></code></td>
+		<td><code><a href="#docsize-event">DocumentSizeEvent</a></code></td>
+		<td>Fired when the document size changes.</td>
+	</tr>
+	<tr>
+		<td><code><b>error</b></code></td>
+		<td><code><a href="#error-event">ErrorEvent</a></code></td>
+		<td>Fired on server or client error.</td>
+	</tr>
+	<tr>
+		<td><code><b>invalidatepreview</b></code></td>
+		<td><code><a href="#invalidatepreview-event">InvalidatePreviewEvent</a></code></td>
+		<td>Fired when a preview needs to be invalidated.</td>
+	</tr>
+	<tr>
+		<td><code><b>pagenumberchanged</b></code></td>
+		<td><code><a href="#pagenumberchanged-event">PageNumberChangedEvent</a></code></td>
+		<td>Fired when the number of pages changes.</td>
+	</tr>
+	<tr>
+		<td><code><b>partpagerectangles</b></code></td>
+		<td><code><a href="#partpagerectangles-event">PartPageRectanglesEvent</a></code></td>
+		<td>Fired when the document is ready, contains information about the size of each page.</td>
+	</tr>
+	<tr>
+		<td><code><b>print</b></code></td>
+		<td><code><a href="#print-event">PrintEvent</a></code></td>
+		<td>Fired when the URL for the PDF export is ready.</td>
+	</tr>
+	<tr>
+		<td><code><b>renderfont</b></code></td>
+		<td><code><a href="#renderfont-event">RenderFontEvent</a></code></td>
+		<td>Fired when the font rendering is ready.</td>
+	</tr>
+	<tr>
+		<td><code><b>search</b></code></td>
+		<td><code><a href="#search-event">SearchEvent</a></code></td>
+		<td>Fired when the search result is ready.</td>
+	</tr>
+	<tr>
+		<td><code><b>scrollby</b></code></td>
+		<td><code><a href="#scrollby-event">ScrollByEvent</a></code></td>
+		<td>Fired when the document is panned with the keyboard.</td>
+	</tr>
+	<tr>
+		<td><code><b>scrollto</b></code></td>
+		<td><code><a href="#scrollto-event">ScrollToEvent</a></code></td>
+		<td>Fired when the cursor goes out of the viewing area.</td>
+	</tr>
+	<tr>
+		<td><code><b>statusindicator</b></code></td>
+		<td><code><a href="#statusindicator-event">StatusIndicator</a></code></td>
+		<td>Fired when leaflet is initialized, during document loading or on reconnection.</td>
+	</tr>
+	<tr>
+		<td><code><b>tilepreview</b></code></td>
+		<td><code><a href="#tilepreview-event">TilePreviewEvent</a></code></td>
+		<td>Fired when the rendering of a requested preview is ready.</td>
+	</tr>
+	<tr>
+		<td><code><b>updateparts</b></code></td>
+		<td><code><a href="#updateparts-event">UpdatePartsEvent</a></code></td>
+		<td>Fired when a new part has been selected.</td>
+	</tr>
+	<tr>
+		<td><code><b>updatepermission</b></code></td>
+		<td><code><a href="#permission-event">PermissionEvent</a></code></td>
+		<td>Fired when the document permission changes.</td>
+	</tr>
+	<tr>
+		<td><code><b>updatescrolloffset</b></code></td>
+		<td><code><a href="#updatescrolloffset-event">UpdateScrollOffsetEvent</a></code></td>
+		<td>Fired when the document is panned and the scrollbars should be moved along with the document.</td>
+	</tr>
+	<tr>
+		<td><code><b>updatetoolbarcommandvalues</b></code></td>
+		<td><code><a href="#updatetoolbarcommandvalues-event">UpdateToolbarCommandValuesEvent</a></code></td>
+		<td>Fired when the document is loaded and contains the available command values for Font, FontSize, Style, etc.</td>
+	</tr>
+</table>
+
+<h3 id="cellformula-event">CellFormulaEvent</h3>
+
+<table data-id='events'>
+	<tr>
+		<th class="width100">property</th>
+		<th>type</th>
+		<th>description</th>
+	</tr>
+	<tr>
+		<td><code><b>formula</b></code></td>
+		<td><code>String</code></td>
+		<td>The formula from the selected cell.</td>
+	</tr>
+</table>
+
+<h3 id="commandresult-event">CommandResult</h3>
+
+<table data-id='events'>
+	<tr>
+		<th class="width100">property</th>
+		<th>type</th>
+		<th>description</th>
+	</tr>
+	<tr>
+		<td><code><b>commandName</b></code></td>
+		<td><code><a href="#commandstatechanged-values">CommandStateChangedValues</a></code></td>
+		<td>UNO command or 'saveas'.</td>
+	</tr>
+	<tr>
+		<td><code><b>success</b></code></td>
+		<td><code>Boolean or undefined</code></td>
+		<td>Returns the status code of the command execution, or
+		    undefined if the result is not provided, and the command
+		    only indicates that the operation has finished.</td>
+	</tr>
+</table>
+
+<h3 id="commandstatechanged-event">CommandStateChangedEvent</h3>
+
+<table data-id='events'>
+	<tr>
+		<th class="width100">property</th>
+		<th>type</th>
+		<th>description</th>
+	</tr>
+	<tr>
+		<td><code><b>commandName</b></code></td>
+		<td><code><a href="#commandstatechanged-values">CommandStateChangedValues</a></code></td>
+		<td>UNO command.</td>
+	</tr>
+	<tr>
+		<td><code><b>state</b></code></td>
+		<td><code><a href="#commandstate-values">CommandStateValues</a></code></td>
+		<td>UNO command state.</td>
+	</tr>
+</table>
+
+<h3 id="docsize-event">DocumentSizeEvent</h3>
+
+<table data-id='events'>
+	<tr>
+		<th class="width100">property</th>
+		<th>type</th>
+		<th>description</th>
+	</tr>
+	<tr>
+		<td><code><b>x</b></code></td>
+		<td><code>Number</code></td>
+		<td>Document width in pixels.</td>
+	</tr>
+	<tr>
+		<td><code><b>y</b></code></td>
+		<td><code>Number</code></td>
+		<td>Document height in pixels.</td>
+	</tr>
+</table>
+
+<h3 id="error-event">ErrorEvent</h3>
+
+<table data-id='events'>
+	<tr>
+		<th class="width100">property</th>
+		<th>type</th>
+		<th>description</th>
+	</tr>
+	<tr>
+		<td><code><b>msg</b></code></td>
+		<td><code>String</code></td>
+		<td>If present, the error message.</td>
+	</tr>
+	<tr>
+		<td><code><b>cmd</b></code></td>
+		<td><code>String</code></td>
+		<td>If present, the server command that caused the error.</td>
+	</tr>
+	<tr>
+		<td><code><b>kind</b></code></td>
+		<td><code>String</code></td>
+		<td>If present, the kind of error associated with the command.</td>
+	</tr>
+</table>
+
+<h3 id="invalidatepreview-event">InvalidatePreviewEvent</h3>
+<p>LOLeaflet specific events.</p>
+
+<table data-id='events'>
+	<tr>
+		<th class="width100">property</th>
+		<th>type</th>
+		<th>description</th>
+	</tr>
+	<tr>
+		<td><code><b>id</b></code></td>
+		<td><code>Object</code></td>
+		<td>Preview's id that needs to be invalidated.</td>
+	</tr>
+</table>
+
+<h3 id="pagenumberchanged-event">PageNumberChangedEvent</h3>
+
+<table data-id='events'>
+	<tr>
+		<th class="width100">property</th>
+		<th>type</th>
+		<th>description</th>
+	</tr>
+	<tr>
+		<td><code><b>currentPage</b></code></td>
+		<td><code>Number</code></td>
+		<td>The current page in the document.</td>
+	</tr>
+	<tr>
+		<td><code><b>pages</b></code></td>
+		<td><code>Number</code></td>
+		<td>The number of pages.</td>
+	</tr>
+	<tr>
+		<td><code><b>docType</b></code></td>
+		<td><code><a href="#documenttype-values">DocumentTypeValues</a></code></td>
+		<td>The document type.</td>
+	</tr>
+</table>
+
+<h3 id="partpagerectangles-event">PartPageRectangles</h3>
+
+<table data-id='events'>
+	<tr>
+		<th class="width100">property</th>
+		<th>type</th>
+		<th>description</th>
+	</tr>
+	<tr>
+		<td><code><b>pixelRectangles</b></code></td>
+        <td><code><a href="#bounds">Bounds[]</a></code></td>
+		<td>An array of bounds representing each page's dimension in pixels on the current zoom level.</td>
+	</tr>
+	<tr>
+		<td><code><b>twipsRectangles</b></code></td>
+		<td><code><a href="#bounds">Bounds[]</a></code></td>
+		<td>An array of bounds representing each page's dimension in twips.</td>
+	</tr>
+</table>
+
+<h3 id="print-event">PrintEvent</h3>
+
+<table data-id='events'>
+	<tr>
+		<th class="width100">property</th>
+		<th>type</th>
+		<th>description</th>
+	</tr>
+	<tr>
+		<td><code><b>url</b></code></td>
+        <td><code>String</code></td>
+		<td>An URL for the PDF exported document.</td>
+	</tr>
+</table>
+
+<h3 id="renderfont-event">RenderFontEvent</h3>
+
+<table data-id='events'>
+	<tr>
+		<th class="width100">property</th>
+		<th>type</th>
+		<th>description</th>
+	</tr>
+	<tr>
+		<td><code><b>font</b></code></td>
+        <td><code>String</code></td>
+		<td>Font name.</td>
+	</tr>
+	<tr>
+		<td><code><b>img</b></code></td>
+        <td><code>String</code></td>
+		<td>The image data URL.</td>
+	</tr>
+</table>
+
 <h3 id="search-event">SearchEvent</h3>
 
 <table data-id='events'>
@@ -1690,128 +2174,27 @@ var map = L.map('map', {
 	</tr>
 </table>
 
-<h3 id="search-result">SearchResult</h3>
+<h3 id="scrollby-event">ScrollByEvent</h3>
 
-<table data-id='values'>
+<table data-id='events'>
 	<tr>
 		<th class="width100">property</th>
-		<th class="width100">type</th>
+		<th>type</th>
 		<th>description</th>
 	</tr>
 	<tr>
-		<td><code><b>part</b></code></td>
+		<td><code><b>x</b></code></td>
 		<td><code>Number</code></td>
-        <td>The part in which the selection lies.</td>
+		<td>Scroll right by x pixels, or left if negative.</td>
 	</tr>
 	<tr>
-		<td><code><b>rectangles</b></code></td>
-        <td><code><a href="#bounds">Bounds[]</a></code></td>
-        <td>Selection bounds in pixels.</td>
-	</tr>
-</table>
-
-<h3 id="print-event">PrintEvent</h3>
-
-<table data-id='events'>
-	<tr>
-		<th class="width100">property</th>
-		<th>type</th>
-		<th>description</th>
-	</tr>
-	<tr>
-		<td><code><b>url</b></code></td>
-        <td><code>String</code></td>
-		<td>An url for the PDF exported document.</td>
-	</tr>
-</table>
-
-<h3 id="partpagerectangles-event">PartPageRectangles</h3>
-
-<table data-id='events'>
-	<tr>
-		<th class="width100">property</th>
-		<th>type</th>
-		<th>description</th>
-	</tr>
-	<tr>
-		<td><code><b>pixelRectangles</b></code></td>
-        <td><code><a href="#bounds">Bounds[]</a></code></td>
-		<td>An array of bounds representing each page's dimension in pixels on the current zoom level.</td>
-	</tr>
-	<tr>
-		<td><code><b>twipsRectangles</b></code></td>
-		<td><code><a href="#bounds">Bounds[]</a></code></td>
-		<td>An array of bounds representing each page's dimension in twips.</td>
-	</tr>
-</table>
-
-<h3 id="permission-event">PermissionEvent</h3>
-
-<table data-id='events'>
-	<tr>
-		<th class="width100">property</th>
-		<th>type</th>
-		<th>description</th>
-	</tr>
-	<tr>
-		<td><code><b>perm</b></code></td>
-		<td><code><a href="#documentpermission-values">DocumentPermission</a></code></td>
-		<td>Document permission.</td>
-	</tr>
-</table>
-
-<h3 id="commandstatechanged-event">CommandStateChangedEvent</h3>
-
-<table data-id='events'>
-	<tr>
-		<th class="width100">property</th>
-		<th>type</th>
-		<th>description</th>
-	</tr>
-	<tr>
-		<td><code><b>commandName</b></code></td>
-		<td><code><a href="#commandstatechanged-values">CommandStateChangedValues</a></code></td>
-		<td>UNO command.</td>
-	</tr>
-	<tr>
-		<td><code><b>state</b></code></td>
-		<td><code><a href="#commandstate-values">CommandStateValues</a></code></td>
-		<td>UNO command state.</td>
-	</tr>
-</table>
-
-<h3 id="updateparts-event">UpdatePartsEvent</h3>
-
-<table data-id='events'>
-	<tr>
-		<th class="width100">property</th>
-		<th>type</th>
-		<th>description</th>
-	</tr>
-	<tr>
-		<td><code><b>selectedPart</b></code></td>
+		<td><code><b>y</b></code></td>
 		<td><code>Number</code></td>
-		<td>The currently selected part.</td>
-	</tr>
-	<tr>
-		<td><code><b>parts</b></code></td>
-		<td><code>Number</code></td>
-		<td>The number of parts in the document.</td>
-	</tr>
-	<tr>
-		<td><code><b>docType</b></code></td>
-		<td><code><a href="#documenttype-values">DocumentTypeValues</a></code></td>
-		<td>The document type.</td>
-	</tr>
-	<tr>
-		<td><code><b>partNames</b></code></td>
-		<td><code>String[]</code></td>
-		<td>If present, an array containing slides' / spreadsheets' names.</td>
+		<td>Scroll down by y pixels, or up if negative.</td>
 	</tr>
 </table>
 
-<h3 id="invalidatepreview-event">InvalidatePreviewEvent</h3>
-<p>Loleaflet specific events.</p>
+<h3 id="scrollto-event">ScrollToEvent</h3>
 
 <table data-id='events'>
 	<tr>
@@ -1820,9 +2203,34 @@ var map = L.map('map', {
 		<th>description</th>
 	</tr>
 	<tr>
-		<td><code><b>id</b></code></td>
-		<td><code>Object</code></td>
-		<td>Preview's id that needs to be invalidated.</td>
+		<td><code><b>x</b></code></td>
+		<td><code>Number</code></td>
+		<td>View's left border position in pixels.</td>
+	</tr>
+	<tr>
+		<td><code><b>y</b></code></td>
+		<td><code>Number</code></td>
+		<td>View's top border position in pixels.</td>
+	</tr>
+</table>
+
+<h3 id="statusindicator-event">StatusIndicatorEvent</h3>
+
+<table data-id='events'>
+	<tr>
+		<th class="width100">property</th>
+		<th>type</th>
+		<th>description</th>
+	</tr>
+	<tr>
+		<td><code><b>statusType</b></code></td>
+		<td><code><a href="#statusindicator-values">StatusIndicatorValues</a></code></td>
+		<td>Status type.</td>
+	</tr>
+	<tr>
+		<td><code><b>value</b></code></td>
+		<td><code>Number</code></td>
+		<td>If present, a number for 0 to 100 representing the loading status.<td>
 	</tr>
 </table>
 
@@ -1866,7 +2274,7 @@ var map = L.map('map', {
 	</tr>
 </table>
 
-<h3 id="statusindicator-event">StatusIndicatorEvent</h3>
+<h3 id="updateparts-event">UpdatePartsEvent</h3>
 
 <table data-id='events'>
 	<tr>
@@ -1875,18 +2283,28 @@ var map = L.map('map', {
 		<th>description</th>
 	</tr>
 	<tr>
-		<td><code><b>statusType</b></code></td>
-		<td><code><a href="#statusindicator-values">StatusIndicatorValues</a></code></td>
-		<td>Status type.</td>
+		<td><code><b>selectedPart</b></code></td>
+		<td><code>Number</code></td>
+		<td>The currently selected part.</td>
 	</tr>
 	<tr>
-		<td><code><b>value</b></code></td>
+		<td><code><b>parts</b></code></td>
 		<td><code>Number</code></td>
-		<td>If present, a number for 0 to 100 represending the loading status.<td>
+		<td>The number of parts in the document.</td>
+	</tr>
+	<tr>
+		<td><code><b>docType</b></code></td>
+		<td><code><a href="#documenttype-values">DocumentTypeValues</a></code></td>
+		<td>The document type.</td>
+	</tr>
+	<tr>
+		<td><code><b>partNames</b></code></td>
+		<td><code>String[]</code></td>
+		<td>If present, an array containing slides' / spreadsheets' names.</td>
 	</tr>
 </table>
 
-<h3 id="docsize-event">DocumentSizeEvent</h3>
+<h3 id="permission-event">PermissionEvent</h3>
 
 <table data-id='events'>
 	<tr>
@@ -1895,14 +2313,9 @@ var map = L.map('map', {
 		<th>description</th>
 	</tr>
 	<tr>
-		<td><code><b>x</b></code></td>
-		<td><code>Number</code></td>
-		<td>Document width in pixels.</td>
-	</tr>
-	<tr>
-		<td><code><b>y</b></code></td>
-		<td><code>Number</code></td>
-		<td>Document height in pixels.</td>
+		<td><code><b>perm</b></code></td>
+		<td><code><a href="#documentpermission-values">DocumentPermission</a></code></td>
+		<td>Document permission.</td>
 	</tr>
 </table>
 
@@ -1923,96 +2336,6 @@ var map = L.map('map', {
 		<td><code><b>y</b></code></td>
 		<td><code>Number</code></td>
 		<td>Difference in pixels between the document's top border and view's top border.</td>
-	</tr>
-</table>
-
-<h3 id="scrollto-event">ScrollToEvent</h3>
-
-<table data-id='events'>
-	<tr>
-		<th class="width100">property</th>
-		<th>type</th>
-		<th>description</th>
-	</tr>
-	<tr>
-		<td><code><b>x</b></code></td>
-		<td><code>Number</code></td>
-		<td>View's left border position in pixels.</td>
-	</tr>
-	<tr>
-		<td><code><b>y</b></code></td>
-		<td><code>Number</code></td>
-		<td>View's top border position in pixels.</td>
-	</tr>
-</table>
-
-<h3 id="scrollby-event">ScrollByEvent</h3>
-
-<table data-id='events'>
-	<tr>
-		<th class="width100">property</th>
-		<th>type</th>
-		<th>description</th>
-	</tr>
-	<tr>
-		<td><code><b>x</b></code></td>
-		<td><code>Number</code></td>
-		<td>Scroll right by x pixels, or left if negative.</td>
-	</tr>
-	<tr>
-		<td><code><b>y</b></code></td>
-		<td><code>Number</code></td>
-		<td>Scroll down by y pixels, or up if negative.</td>
-	</tr>
-</table>
-
-<h3 id="pagenumberchanged-event">PageNumberChangedEvent</h3>
-
-<table data-id='events'>
-	<tr>
-		<th class="width100">property</th>
-		<th>type</th>
-		<th>description</th>
-	</tr>
-	<tr>
-		<td><code><b>currentPage</b></code></td>
-		<td><code>Number</code></td>
-		<td>The current page in the document.</td>
-	</tr>
-	<tr>
-		<td><code><b>pages</b></code></td>
-		<td><code>Number</code></td>
-		<td>The number of pages.</td>
-	</tr>
-	<tr>
-		<td><code><b>docType</b></code></td>
-		<td><code><a href="#documenttype-values">DocumentTypeValues</a></code></td>
-		<td>The document type.</td>
-	</tr>
-</table>
-
-<h3 id="error-event">ErrorEvent</h3>
-
-<table data-id='events'>
-	<tr>
-		<th class="width100">property</th>
-		<th>type</th>
-		<th>description</th>
-	</tr>
-	<tr>
-		<td><code><b>msg</b></code></td>
-		<td><code>String</code></td>
-		<td>If present, the error message.</td>
-	</tr>
-	<tr>
-		<td><code><b>cmd</b></code></td>
-		<td><code>String</code></td>
-		<td>If present, the server command that caused the error.</td>
-	</tr>
-	<tr>
-		<td><code><b>kind</b></code></td>
-		<td><code>String</code></td>
-		<td>If present, the kind of error associated with the command.</td>
 	</tr>
 </table>
 
@@ -2039,6 +2362,26 @@ var map = L.map('map', {
 <h2 id="loleaflet-object-values">Object values</h2>
 
 <p>A list of possible values for different event object properties.</p>
+
+<h3 id="search-result">SearchResult</h3>
+
+<table data-id='values'>
+	<tr>
+		<th class="width100">property</th>
+		<th class="width100">type</th>
+		<th>description</th>
+	</tr>
+	<tr>
+		<td><code><b>part</b></code></td>
+		<td><code>Number</code></td>
+        <td>The part in which the selection lies.</td>
+	</tr>
+	<tr>
+		<td><code><b>rectangles</b></code></td>
+        <td><code><a href="#bounds">Bounds[]</a></code></td>
+        <td>Selection bounds in pixels.</td>
+	</tr>
+</table>
 
 <h3 id="documentpermission-values">DocumentPermissionValues</h3>
 
@@ -2101,7 +2444,7 @@ var map = L.map('map', {
 	<tr>
 		<td><code><b>'.uno:CenterPara'</b></code></td>
 		<td><code>String</code></td>
-		<td>Center horizontaly.</td>
+		<td>Center horizontally.</td>
 	</tr>
 	<tr>
 		<td><code><b>'.uno:RightPara'</b></code></td>
@@ -2262,6 +2605,26 @@ var map = L.map('map', {
 		<td><code><b>'.uno:CharFontName'</b></code></td>
 		<td><code>String</code></td>
 		<td>Font related uno command.</td>
+	</tr>
+</table>
+
+<h2 id="loleaflet-uno-commands">Object values</h2>
+
+<p>A list of common uno commands with their additional parameters.</p>
+<pre><code class="javascript">map.sendUnoCommand('.uno:Bold')<code></pre>
+<pre><code class="javascript">map.sendUnoCommand('.uno:Color',
+{
+  "Color": {
+    "type": "long",
+    "value": 16750848
+  }
+})<code></pre>
+
+<table data-id='values' id='uno-commands-table'>
+	<tr>
+		<th class="width100">command</th>
+		<th class="width100">parameter</th>
+		<th>description</th>
 	</tr>
 </table>
 
@@ -2611,7 +2974,7 @@ var map = L.map('map', {
 		<td><code><b>closeButton</b></code></td>
 		<td><code>Boolean</code></td>
 		<td><code><span class="literal">true</span></code></td>
-		<td>Controls the presense of a close button in the popup.</td>
+		<td>Controls the presence of a close button in the popup.</td>
 	</tr>
 	<tr>
 		<td><code><b>offset</b></code></td>
@@ -3653,7 +4016,7 @@ var latlngs = [
 
 <h3>Methods</h3>
 
-<p>In addition to <a href="#path-methods">Path methods</a> like <code>redraw()</code> and <code>bringToFront()</code>, <a href="#polyline-methods">Polyline mehtods</a> like <code>setLatLngs()</code> and <code>getLatLngs()</code>, <a href="#layers">shared layer methods</a> like <code>addTo()</code> and <code>remove()</code> and <a href="#popups">popup methods</a> like <code>bindPopup()</code> you can also use the following methods:</p>
+<p>In addition to <a href="#path-methods">Path methods</a> like <code>redraw()</code> and <code>bringToFront()</code>, <a href="#polyline-methods">Polyline methods</a> like <code>setLatLngs()</code> and <code>getLatLngs()</code>, <a href="#layers">shared layer methods</a> like <code>addTo()</code> and <code>remove()</code> and <a href="#popups">popup methods</a> like <code>bindPopup()</code> you can also use the following methods:</p>
 
 <table data-id='polygon'>
 	<tr>
@@ -4242,7 +4605,7 @@ map.fitBounds(bounds);</code></pre>
 
 <h3>Synchronous usage example</h3>
 
-<p>To create a custom layer, extend GridLayer and impliment the <code>createTile()</code> method, which will be passed a <a href="#point">Point</a> object with the <code>x</code>, <code>y</code>, and <code>z</code> (zoom level) coordinates to draw your tile.</p>
+<p>To create a custom layer, extend GridLayer and implement the <code>createTile()</code> method, which will be passed a <a href="#point">Point</a> object with the <code>x</code>, <code>y</code>, and <code>z</code> (zoom level) coordinates to draw your tile.</p>
 
 <pre><code class="javascript">var CanvasLayer = L.GridLayer.extend({
 	createTile: function(coords){
@@ -4262,9 +4625,9 @@ map.fitBounds(bounds);</code></pre>
 	}
 });</code></pre>
 
-<h3>Asyncronous usage example</h3>
+<h3>Asynchronous usage example</h3>
 
-<p>Tile creation can also be asyncronous, this is useful when using a third-party drawing library. Once the tile has finished drawing it must be passed to the <code>done()</code> callback.</p>
+<p>Tile creation can also be asynchronous, this is useful when using a third-party drawing library. Once the tile has finished drawing it must be passed to the <code>done()</code> callback.</p>
 
 <pre><code class="javascript">var CanvasLayer = L.GridLayer.extend({
 	// createTile has a 'done' parameter when on async mode
@@ -4528,7 +4891,7 @@ map.panTo(L.latLng(50, 30));</code></pre>
 		</code></td>
 
 		<td><code>Number</code></td>
-		<td>Returns the distance (in meters) to the given LatLng calculated using the Haversine formula. See <a href="http://en.wikipedia.org/wiki/Haversine_formula">description on wikipedia</a></td>
+		<td>Returns the distance (in meters) to the given LatLng calculated using the Haversine formula. See <a href="http://en.wikipedia.org/wiki/Haversine_formula">description on Wikipedia</a></td>
 	</tr>
 	<tr>
 		<td><code><b>equals</b>(
@@ -4537,7 +4900,7 @@ map.panTo(L.latLng(50, 30));</code></pre>
 		</code></td>
 
 		<td><code>Boolean</code></td>
-		<td>Returns <code><span class="literal">true</span></code> if the given LatLng point is at the same position (within a small margin of error). The margin of error can be overriden by setting <code>maxMargin</code> to a small number.</td>
+		<td>Returns <code><span class="literal">true</span></code> if the given LatLng point is at the same position (within a small margin of error). The margin of error can be overridden by setting <code>maxMargin</code> to a small number.</td>
 	</tr>
 	<tr>
 		<td><code><b>toString</b>()</code></td>
@@ -5683,7 +6046,7 @@ layer.remove();</code></pre>
 
 <h2 id="popups">Popup methods</h2>
 
-A set of methods inherited from the <a href="#layer">Layer</a> base class that all Leaflet layers use. These methods provide convieniant ways of binding popups to any layer.
+A set of methods inherited from the <a href="#layer">Layer</a> base class that all Leaflet layers use. These methods provide convenient ways of binding popups to any layer.
 
 <pre><code class="javascript">var layer = L.Polgon(latlngs).bindPopup('Hi There!').addTo(map);
 layer.openPopup();
@@ -5702,7 +6065,7 @@ Popups will also be automatically opened when the layer is clicked on and closed
 	<tr>
 		<td><code><b>bindPopup</b>(<nobr>&lt;String|HTMLElement|Function|<a href="popup">Popup</a>&gt;</nobr> <i>content</i>, <nobr>&lt;<a href="#popup-options">PopupOptions</a>&gt; <i>options?</i>)</nobr></code></td>
 		<td><code class="javascript"><span class="keyword">this</span></code></td>
-		<td>Binds the passed <code>content</code> to the layer and sets up the neccessary event listeners. If a <code>Function</code> is passed the function will recive a layer as the first argument and should return a <code>String</code> or <code>HTMLElement</code>.</td>
+		<td>Binds the passed <code>content</code> to the layer and sets up the necessary event listeners. If a <code>Function</code> is passed, the function will receive a layer as the first argument and should return a <code>String</code> or <code>HTMLElement</code>.</td>
 		<pre><code class="javascript">featureGroup.bindPopup(function(layer){
 	return "a unique template for this layer.";
 });</code></pre>
@@ -5715,7 +6078,7 @@ Popups will also be automatically opened when the layer is clicked on and closed
 	<tr>
 		<td><code><b>openPopup</b>(<a href="#latlng">LatLng</a> <i>latlng?</i>)</nobr></code></td>
 		<td><code class="javascript"><span class="keyword">this</span></code></td>
-		<td>Opens the bound popup at the specificed <code>latlng</code> or at the default popup anchor if no <code>latlng</code> is passed.</td>
+		<td>Opens the bound popup at the specified <code>latlng</code> or at the default popup anchor if no <code>latlng</code> is passed.</td>
 	</tr>
 	<tr>
 		<td><code><b>closePopup</b>()</nobr></code></td>
@@ -5771,12 +6134,12 @@ Popups will also be automatically opened when the layer is clicked on and closed
 	<tr>
 		<td><code><b>webkit</b></code></td>
 		<td><code>Boolean</code></td>
-		<td><code><span class="literal">true</span></code> for webkit-based browsers like Chrome and Safari (including mobile versions).</td>
+		<td><code><span class="literal">true</span></code> for WebKit-based browsers like Chrome and Safari (including mobile versions).</td>
 	</tr>
 	<tr>
 		<td><code><b>webkit3d</b></code></td>
 		<td><code>Boolean</code></td>
-		<td><code><span class="literal">true</span></code> for webkit-based browsers that support CSS 3D transformations.</td>
+		<td><code><span class="literal">true</span></code> for WebKit-based browsers that support CSS 3D transformations.</td>
 	</tr>
 	<!--<tr>
 		<td><code><b>gecko</b></code></td>
@@ -5806,7 +6169,7 @@ Popups will also be automatically opened when the layer is clicked on and closed
 	<tr>
 		<td><code><b>mobileWebkit</b></code></td>
 		<td><code>Boolean</code></td>
-		<td><code><span class="literal">true</span></code> for mobile webkit-based browsers.</td>
+		<td><code><span class="literal">true</span></code> for mobile WebKit-based browsers.</td>
 	</tr>
 	<tr>
 		<td><code><b>mobileOpera</b></code></td>
@@ -6050,7 +6413,7 @@ Popups will also be automatically opened when the layer is clicked on and closed
 
 <h2 id="lineutil">LineUtil</h2>
 
-<p>Various utility functions for polyine points processing, used by Leaflet internally to make polylines lightning-fast.</p>
+<p>Various utility functions for polyline points processing, used by Leaflet internally to make polylines lightning-fast.</p>
 
 <h3>Methods</h3>
 
@@ -6127,7 +6490,7 @@ Popups will also be automatically opened when the layer is clicked on and closed
 
 		<td><code><a href="#point">Point</a>[]</code></td>
 
-		<td>Clips the polygon geometry defined by the given points by rectangular bounds. Used by Leaflet to only show polygon points that are on the screen or near, increasing performance. Note that polygon points needs different algorithm for clipping than polyline, so there's a seperate method for it.</td>
+		<td>Clips the polygon geometry defined by the given points by rectangular bounds. Used by Leaflet to only show polygon points that are on the screen or near, increasing performance. Note that polygon points needs different algorithm for clipping than polyline, so there's a separate method for it.</td>
 	</tr>
 </table>
 
@@ -6743,7 +7106,7 @@ a.options.myOption1; // 'baz'
 a.options.myOption2; // 'bar'
 a.options.myOption3; // 5</code></pre>
 
-<p>There's also <code>L.Util.setOptions</code>, a method for conveniently merging options passed to constructor with the defauls defines in the class:</p>
+<p>There's also <code>L.Util.setOptions</code>, a method for conveniently merging options passed to constructor with the defaults defined in the class:</p>
 
 <pre><code>var MyClass = L.Class.extend({
 	options: {
@@ -7011,7 +7374,7 @@ var myLayer = new MyCustomLayer(latlng).addTo(map);
 		</code></td>
 
 		<td><code>HTMLElement</code></td>
-		<td>Should contain code that creates all the neccessary DOM elements for the control, adds listeners on relevant map events, and returns the element containing the control. Called on <code>map.addControl(control)</code> or <code>control.addTo(map)</code>.</td>
+		<td>Should contain code that creates all the necessary DOM elements for the control, adds listeners on relevant map events, and returns the element containing the control. Called on <code>map.addControl(control)</code> or <code>control.addTo(map)</code>.</td>
 	</tr>
 	<tr>
 		<td><code><b>onRemove</b>(
@@ -7417,7 +7780,7 @@ map.addControl(new MyControl());
 
 <h2 id="event-objects">Event objects</h2>
 
-<p>Event object is an object that you recieve as an argument in a listener function when some event is fired, containing useful information about that event. For example:</p>
+<p>Event object is an object that you receive as an argument in a listener function when some event is fired, containing useful information about that event. For example:</p>
 
 <pre><code class="javascript">map.on('click', function(e) {
 	alert(e.latlng); // e is an event object (MouseEvent in this case)
@@ -7456,17 +7819,17 @@ map.addControl(new MyControl());
 	<tr>
 		<td><code><b>latlng</b></code></td>
 		<td><code><a href="#latlng">LatLng</a></code></td>
-		<td>The geographical point where the mouse event occured.</td>
+		<td>The geographical point where the mouse event occurred.</td>
 	</tr>
 	<tr>
 		<td><code><b>layerPoint</b></code></td>
 		<td><code><a href="#point">Point</a></code></td>
-		<td>Pixel coordinates of the point where the mouse event occured relative to the map layer.</td>
+		<td>Pixel coordinates of the point where the mouse event occurred relative to the map layer.</td>
 	</tr>
 	<tr>
 		<td><code><b>containerPoint</b></code></td>
 		<td><code><a href="#point">Point</a></code></td>
-		<td>Pixel coordinates of the point where the mouse event occured relative to the map сontainer.</td>
+		<td>Pixel coordinates of the point where the mouse event occurred relative to the map сontainer.</td>
 	</tr>
 	<tr>
 		<td><code><b>originalEvent</b></code></td>
@@ -7784,20 +8147,285 @@ for (var i = 0, len = tables.length; i < len; i++) {
 </script>
 
 <script>
-	var _gaq = _gaq || [];
-	_gaq.push([ '_setAccount', 'UA-4147697-4' ]);
-	_gaq.push([ '_trackPageview' ]);
+// I've tried to order them alphabetically, feel free to modify if some are not in the correct order
+var unoCommands = [
+{
+    uno: '.uno:BackColor',
+    parameter: {
+        'BackColor': {
+            type: 'long',
+            value: 16750848
+        }
+    },
+    description: 'Apply a highlighting color for a text document (the value can be obtained by converting the base 16 color to base 10).'
+},
 
-	(function() {
-		var ga = document.createElement('script');
-		ga.type = 'text/javascript';
-		ga.async = true;
-		ga.src = ('https:' == document.location.protocol ? 'https://ssl'
-				: 'http://www')
-				+ '.google-analytics.com/ga.js';
-		var s = document.getElementsByTagName('script')[0];
-		s.parentNode.insertBefore(ga, s);
-	})();
+{
+    uno: '.uno:BackgroundColor',
+    parameter: {
+        'BackgroundColor': {
+            type: 'long',
+            value: 16750848
+        }
+    },
+    description: 'Apply a highlighting color for a spreadsheet document (the value can be obtained by converting the base 16 color to base 10).'
+},
+
+{
+    uno: '.uno:Bold',
+    parameter: null,
+    description: 'Bold.'
+},
+
+{
+    uno: '.uno:CenterPara',
+    parameter: null,
+    description: 'Center horizontally.'
+},
+
+{
+    uno: '.uno:CharBackColor',
+    parameter: {
+        'CharBackColor': {
+            type: 'long',
+            value: 16750848
+        }
+    },
+    description: 'Apply a font color for a presentation document (the value can be obtained by converting the base 16 color to base 10).'
+},
+
+{
+    uno: '.uno:CharFontName',
+    parameter: {
+        'CharFontName.FamilyName': {
+            type: 'string',
+            value: 'Arial'
+        }
+    },
+    description: 'Apply font.'
+},
+
+{
+    uno: '.uno:Color',
+    parameter: {
+        'Color': {
+            type: 'long',
+            value: 16750848
+        }
+    },
+    description: 'Apply a font color for a non-text document, like a spreadsheet, presentation, etc (the value can be obtained by converting the base 16 color to base 10).'
+},
+
+{
+    uno: '.uno:DecrementIndent',
+    parameter: null,
+    description: 'Decrement paragraph indentation.'
+},
+
+{
+    uno: '.uno:DefaultBullet',
+    parameter: null,
+    description: 'Bullets ON/OFF.'
+},
+
+{
+    uno: '.uno:DefaultNumbering',
+    parameter: null,
+    description: 'Numbering ON/OFF.'
+},
+
+{
+    uno: '.uno:DeleteComment',
+    parameter: null,
+    description: 'Delete comment.'
+},
+
+{
+    uno: '.uno:EnterString',
+    parameter: {
+        'StringName': {
+            type: 'string',
+            value: '=SUM()'
+        }
+    },
+    description: 'Enters the string in the selected cell.'
+},
+
+{
+    uno: '.uno:FontColor',
+    parameter: {
+        'FontColor': {
+            type: 'long',
+            value: 16750848
+        }
+    },
+    description: 'Apply a font color for a text document (the value can be obtained by converting the base 16 color to base 10).'
+},
+
+{
+    uno: '.uno:FontHeight',
+    parameter: {
+        'FontHeight.Height': {
+            type: 'float',
+            value: '11.5'
+        }
+    },
+    description: 'Apply font size.'
+},
+
+{
+    uno: '.uno:HideWhitespace',
+    parameter: {
+        'type': 'boolean',
+        'value': 'false'
+    },
+    description: 'Continous web view of the document'
+},
+
+{
+    uno: '.uno:IncrementIndent',
+    parameter: null,
+    description: 'Increment paragraph indentation.'
+},
+
+{
+    uno: '.uno:InsertAnnotation',
+    parameter: {
+        'Author': {
+            type: 'string',
+            value: 'A U Thor'
+        }
+    },
+    description: 'Insert comment.'
+},
+
+{
+    uno: '.uno:Italic',
+    parameter: null,
+    description: 'Italic.'
+},
+
+{
+    uno: '.uno:JustifyPara',
+    parameter: null,
+    description: 'Justified.'
+},
+
+{
+    uno: '.uno:LeftPara',
+    parameter: null,
+    description: 'Align left.'
+},
+
+{
+    uno: '.uno:OutlineFont',
+    parameter: null,
+    description: 'Outline.'
+},
+
+{
+    uno: '.uno:Redo',
+    parameter: null,
+    description: 'Redo.'
+},
+
+{
+    uno: '.uno:ResetAttributes',
+    parameter: null,
+    description: 'Clear direct formating.'
+},
+
+{
+    uno: '.uno:RightPara',
+    parameter: null,
+    description: 'Align right.'
+},
+
+{
+    uno: '.uno:StyleApply',
+    parameter: {
+        'Style': {
+            type: 'string',
+            value: 'Title'
+        },
+        'FamilyName': {
+            type: 'string',
+            value: 'ParagraphStyles'
+        }
+    },
+    description: 'Apply style from style family.'
+},
+
+{
+    uno: '.uno:Save',
+    parameter: null,
+    description: 'Save the document.'
+},
+
+{
+    uno: '.uno:SetHyperlink',
+    parameter: {
+        'Hyperlink.Text': {
+            type: 'string',
+            value: 'some text'
+        },
+        'Hyperlink.URL': {
+            type: 'string',
+            value: 'url'
+        }
+    },
+    description: 'Creates a hyperlink. If Hyperlink.Text is not specified, the hyperlink will be set for the current ' +
+                     'selection. Hyperlink.URL can be a web URL or a bookmark from the document.'
+},
+
+{
+    uno: '.uno:Shadowed',
+    parameter: null,
+    description: 'Shadowed.'
+},
+
+{
+    uno: '.uno:SubScript',
+    parameter: null,
+    description: 'Subscript.'
+},
+
+{
+    uno: '.uno:SuperScript',
+    parameter: null,
+    description: 'Superscript.'
+},
+
+{
+    uno: '.uno:Strikeout',
+    parameter: null,
+    description: 'Strikeout / strike-through.'
+},
+
+{
+    uno: '.uno:Underline',
+    parameter: null,
+    description: 'Underline.'
+},
+
+{
+    uno: '.uno:Undo',
+    parameter: null,
+    description: 'Undo.'
+},
+
+];
+$(document).ready(function() {
+    var table = $('#uno-commands-table');
+    unoCommands.forEach(function (unoCommand) {
+        table.append(
+            '<tr>' +
+            '	<td><code><b>' + unoCommand.uno + '</b></code></td>' +
+            '	<td><code><pre>' + JSON.stringify(unoCommand.parameter, null, 2) + '</pre></code></td>' +
+            '	<td>' + unoCommand.description + '</td>' +
+            '</tr>');
+    });
+});
 </script>
 
 <script type="text/javascript" src="docs/js/docs.js"></script>

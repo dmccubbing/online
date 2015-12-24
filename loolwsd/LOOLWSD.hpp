@@ -32,26 +32,33 @@ public:
     // statics
     static int portNumber;
     static int timeoutCounter;
+    static int _numPreSpawnedChildren;
+    static int writerBroker;
     static bool doTest;
+    static bool volatile isShutDown;
     static std::string cache;
     static std::string sysTemplate;
     static std::string loTemplate;
     static std::string childRoot;
     static std::string loSubPath;
     static std::string jail;
-    static Poco::SharedMemory _sharedForkChild;
     static Poco::NamedMutex _namedMutexLOOL;
-    static Poco::Random _rng;
+    static Poco::UInt64 _childId;
 
     static const int DEFAULT_CLIENT_PORT_NUMBER = 9980;
     static const int MASTER_PORT_NUMBER = 9981;
     static const int INTERVAL_PROBES = 10;
     static const int MAINTENANCE_INTERVAL = 1;
+    static const int POLL_TIMEOUT = 1000000;
     static const std::string CHILD_URI;
     static const std::string PIDLOG;
+    static const std::string FIFO_FILE;
     static const std::string LOKIT_PIDLOG;
 
 protected:
+    static void setSignals(bool bIgnore);
+    static void handleSignal(int nSignal);
+
     void initialize(Poco::Util::Application& self) override;
     void uninitialize() override;
     void defineOptions(Poco::Util::OptionSet& options) override;
@@ -60,7 +67,6 @@ protected:
 
 private:
     void displayHelp();
-    bool childMode() const;
     void componentMain();
     void desktopMain();
     void startupComponent(int nComponents);
@@ -68,9 +74,9 @@ private:
     int  createComponent();
     int  createDesktop();
 
-    Poco::UInt64 _childId;
-    static int _numPreSpawnedChildren;
-    static std::mutex _rngMutex;
+    void startupBroker(int nBroker);
+    int  createBroker();
+
 
 #if ENABLE_DEBUG
 public:

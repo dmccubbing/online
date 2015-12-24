@@ -46,10 +46,18 @@ L.Socket = {
 	_onOpen: function () {
 		var msg = 'load url=' + this._map.options.doc;
 		if (this._map._docLayer) {
+			// we are reconnecting after a lost connection
 			msg += ' part=' + this._map.getCurrentPartNumber();
+			this._map.fire('statusindicator', {statusType : 'reconnected'});
 		}
 		if (this._map.options.timestamp) {
 			msg += ' timestamp=' + this._map.options.timestamp;
+		}
+		if (this._map.options.renderingOptions) {
+			var options = {
+				'rendering': this._map.options.renderingOptions
+			};
+			msg += ' options=' + JSON.stringify(options);
 		}
 		this.socket.send(msg);
 		this.socket.send('status');
@@ -77,13 +85,15 @@ L.Socket = {
 			textMsg = String.fromCharCode.apply(null, imgBytes.subarray(0, index));
 		}
 
-		if (!textMsg.startsWith('tile:')) {
+		if (!textMsg.startsWith('tile:') && !textMsg.startsWith('renderfont:')) {
 			// log the tile msg separately as we need the tile coordinates
 			L.Log.log(textMsg, L.INCOMING);
 			if (imgBytes !== undefined) {
 				// if it's not a tile, parse the whole message
 				textMsg = String.fromCharCode.apply(null, imgBytes);
 			}
+			// Decode UTF-8.
+			textMsg = decodeURIComponent(window.escape(textMsg));
 		}
 		else {
 			var data = imgBytes.subarray(index + 1);
@@ -97,33 +107,46 @@ L.Socket = {
 
 		if (textMsg.startsWith('status:') && !this._map._docLayer) {
 			// first status message, we need to create the document layer
+			var tileWidthTwips = this._map.options.tileWidthTwips;
+			var tileHeightTwips = this._map.options.tileHeightTwips;
+			if (this._map.options.zoom !== this._map.options.defaultZoom) {
+				var scale = this._map.options.crs.scale(this._map.options.defaultZoom - this._map.options.zoom);
+				tileWidthTwips = Math.round(tileWidthTwips * scale);
+				tileHeightTwips = Math.round(tileHeightTwips * scale);
+			}
+
 			var command = this.parseServerCmd(textMsg);
 			var docLayer = null;
 			if (command.type === 'text') {
 				docLayer = new L.WriterTileLayer('', {
-					edit: this._map.options.edit,
-					readOnly: this._map.options.readOnly
+					permission: this._map.options.permission,
+					tileWidthTwips: tileWidthTwips,
+					tileHeightTwips: tileHeightTwips,
+					docType: command.type
 				});
 			}
 			else if (command.type === 'spreadsheet') {
 				docLayer = new L.CalcTileLayer('', {
-					edit: this._map.options.edit,
-					readOnly: this._map.options.readOnly
+					permission: this._map.options.permission,
+					tileWidthTwips: tileWidthTwips,
+					tileHeightTwips: tileHeightTwips,
+					docType: command.type
 				});
 			}
 			else {
-				if (command.type === 'presentation') {
+				if (command.type === 'presentation' &&
+						this._map.options.defaultZoom === this._map.options.zoom) {
+					// If we have a presentation document and the zoom level has not been set
+					// in the options, resize the document so that it fits the viewing area
 					var verticalTiles = this._map.getSize().y / 256;
-					var tileTwipsSize = Math.round(command.height / verticalTiles);
-				}
-				else {
-					tileTwipsSize = 3000;
+					tileWidthTwips = Math.round(command.height / verticalTiles);
+					tileHeightTwips = Math.round(command.height / verticalTiles);
 				}
 				docLayer = new L.ImpressTileLayer('', {
-					edit: this._map.options.edit,
-					readOnly: this._map.options.readOnly,
-					tileWidthTwips: tileTwipsSize,
-					tileHeightTwips: tileTwipsSize
+					permission: this._map.options.permission,
+					tileWidthTwips: tileWidthTwips,
+					tileHeightTwips: tileHeightTwips,
+					docType: command.type
 				});
 			}
 
@@ -209,12 +232,16 @@ L.Socket = {
 			else if (tokens[i].substring(0, 5) === 'port=') {
 				command.port = tokens[i].substring(5);
 			}
+			else if (tokens[i].substring(0, 5) === 'font=') {
+				command.font = window.decodeURIComponent(tokens[i].substring(5));
+			}
 		}
 		if (command.tileWidth && command.tileHeight && this._map._docLayer) {
+			var defaultZoom = this._map.options.zoom;
 			var scale = command.tileWidth / this._map._docLayer.options.tileWidthTwips;
-			// scale = 1.2 ^ (10 - zoom)
-			// zoom = 10 -log(scale) / log(1.2)
-			command.zoom = Math.round(10 - Math.log(scale) / Math.log(1.2));
+			// scale = 1.2 ^ (defaultZoom - zoom)
+			// zoom = defaultZoom -log(scale) / log(1.2)
+			command.zoom = Math.round(defaultZoom - Math.log(scale) / Math.log(1.2));
 		}
 		return command;
 	}

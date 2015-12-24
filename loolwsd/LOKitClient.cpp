@@ -51,7 +51,10 @@ extern "C"
             CASE(TEXT_SELECTION_END);
             CASE(CURSOR_VISIBLE);
             CASE(GRAPHIC_SELECTION);
+            CASE(CELL_CURSOR);
+            CASE(CELL_FORMULA);
             CASE(HYPERLINK_CLICKED);
+            CASE(MOUSE_POINTER);
             CASE(STATE_CHANGED);
             CASE(STATUS_INDICATOR_START);
             CASE(STATUS_INDICATOR_SET_VALUE);
@@ -60,6 +63,7 @@ extern "C"
             CASE(SEARCH_RESULT_SELECTION);
             CASE(DOCUMENT_SIZE_CHANGED);
             CASE(SET_PART);
+            CASE(UNO_COMMAND_RESULT);
 #undef CASE
         }
         std::cout << " payload: " << pPayload << std::endl;
@@ -99,7 +103,7 @@ protected:
 
         loKitDocument->pClass->registerCallback(loKitDocument, myCallback, NULL);
 
-        loKitDocument->pClass->initializeForRendering(loKitDocument);
+        loKitDocument->pClass->initializeForRendering(loKitDocument, nullptr);
 
         if (isatty(0))
         {
@@ -162,7 +166,8 @@ protected:
                     continue;
 
                 std::vector<char> png;
-                Util::encodePNGAndAppendToBuffer(pixmap.data(), canvasWidth, canvasHeight, png);
+                LibreOfficeKitTileMode mode = static_cast<LibreOfficeKitTileMode>(loKitDocument->pClass->getTileMode(loKitDocument));
+                Util::encodePNGAndAppendToBuffer(pixmap.data(), canvasWidth, canvasHeight, png, mode);
 
                 TemporaryFile pngFile;
                 std::ofstream pngStream(pngFile.path(), std::ios::binary);

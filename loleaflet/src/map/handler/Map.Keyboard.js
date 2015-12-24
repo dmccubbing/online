@@ -38,6 +38,42 @@ L.Map.Keyboard = L.Handler.extend({
 		40  : 1024, // down arrow	: DOWN
 		45  : 1285, // insert		: INSERT
 		46  : 1286, // delete		: DELETE
+		48  : 256,  // 0		: NUM0
+		49  : 257,  // 1		: NUM1
+		50  : 258,  // 2		: NUM2
+		51  : 259,  // 3		: NUM3
+		52  : 260,  // 4		: NUM4
+		53  : 261,  // 5		: NUM5
+		54  : 262,  // 6		: NUM6
+		55  : 263,  // 7		: NUM7
+		56  : 264,  // 8		: NUM8
+		57  : 265,  // 9		: NUM9
+		65  : 512,  // A		: A
+		66  : 513,  // B		: B
+		67  : 514,  // C		: C
+		68  : 515,  // D		: D
+		69  : 516,  // E		: E
+		70  : 517,  // F		: F
+		71  : 518,  // G		: G
+		72  : 519,  // H		: H
+		73  : 520,  // I		: I
+		74  : 521,  // J		: J
+		75  : 522,  // K		: K
+		76  : 523,  // L		: L
+		77  : 524,  // M		: M
+		78  : 525,  // N		: N
+		79  : 526,  // O		: O
+		80  : 527,  // P		: P
+		81  : 528,  // Q		: Q
+		82  : 529,  // R		: R
+		83  : 530,  // S		: S
+		84  : 531,  // T		: T
+		85  : 532,  // U		: U
+		86  : 533,  // V		: V
+		87  : 534,  // W		: W
+		88  : 535,  // X		: X
+		89  : 536,  // Y		: Y
+		90  : 537,  // Z		: Z
 		91  : null, // left window key	: UNKOWN
 		92  : null, // right window key	: UNKOWN
 		93  : null, // select key	: UNKOWN
@@ -69,10 +105,11 @@ L.Map.Keyboard = L.Handler.extend({
 		122 : 778,  // f11		: F11
 		144 : 1313, // num lock		: NUMLOCK
 		145 : 1314, // scroll lock	: SCROLLLOCK
+		173 : 1288, // dash		: DASH (on Firefox)
 		186 : 1317, // semi-colon	: SEMICOLON
 		187 : 1295, // equal sign	: EQUAL
 		188 : 1292, // comma		: COMMA
-		189 : 5,    // dash		: DASH
+		189 : 1288, // dash		: DASH
 		190 : null, // period		: UNKOWN
 		191 : null, // forward slash	: UNKOWN
 		192 : null, // grave accent	: UNKOWN
@@ -116,6 +153,7 @@ L.Map.Keyboard = L.Handler.extend({
 		this._setPanOffset(map.options.keyboardPanOffset);
 		this._setZoomOffset(map.options.keyboardZoomOffset);
 		this.modifier = 0;
+		this.dopagejump = 0;
 	},
 
 	addHooks: function () {
@@ -189,17 +227,39 @@ L.Map.Keyboard = L.Handler.extend({
 		var ctrl = e.originalEvent.ctrlKey ? this.keyModifier.ctrl : 0;
 		var alt = e.originalEvent.altKey ? this.keyModifier.alt : 0;
 		this.modifier = shift | ctrl | alt;
-		if (e.originalEvent.ctrlKey) {
-			this._handleCtrlCommand(e);
-			return;
+
+		if (ctrl) {
+			if (this._handleCtrlCommand(e)) {
+				return;
+			}
+		}
+
+		// page up or page down, handled by this.dopagejump
+		// to jump back to the anchor from footnote/endnote by PgUp
+		// or jump back to the main text from header/footer by PgUp or PgDown
+		if (!this.modifier && (e.originalEvent.keyCode === 33 || e.originalEvent.keyCode === 34)) {
+			if (this.dopagejump === 1) {
+				return;
+			}
+			if (e.type === 'keyup') {
+				this.dopagejump = 1;
+			}
+		}
+		else if (e.type === 'keyup') {
+			this.dopagejump = 0;
 		}
 
 		var charCode = e.originalEvent.charCode;
 		var keyCode = e.originalEvent.keyCode;
 		var unoKeyCode = this._toUNOKeyCode(keyCode);
 
-		if (e.originalEvent.shiftKey) {
-			unoKeyCode |= this.keyModifier.shift;
+		if (this.modifier) {
+			unoKeyCode |= this.modifier;
+			if (e.type !== 'keyup' && (this.modifier !== shift || keyCode === 32)) {
+				docLayer._postKeyboardEvent('input', charCode, unoKeyCode);
+				e.originalEvent.preventDefault();
+				return;
+			}
 		}
 
 		if (docLayer._permission === 'edit') {
@@ -247,65 +307,77 @@ L.Map.Keyboard = L.Handler.extend({
 	},
 
 	_handleCtrlCommand: function (e) {
-		if (e.type !== 'keydown') {
+		if (e.type !== 'keydown' && e.originalEvent.key !== 'c' && e.originalEvent.key !== 'v') {
 			e.originalEvent.preventDefault();
-			return;
-		};
+			return true;
+		}
+
+		if (e.originalEvent.keyCode !== 67 && e.originalEvent.keyCode !== 86 && e.originalEvent.key !== 'c' && e.originalEvent.key !== 'v') {
+			// not copy or paste
+			e.originalEvent.preventDefault();
+		}
+
+		if (e.originalEvent.altKey || e.originalEvent.shiftKey) {
+
+			// Ctrl + Alt
+			if (!e.originalEvent.shiftKey) {
+				switch (e.originalEvent.keyCode) {
+					case 53: // 5
+						L.Socket.sendMessage('uno .uno:Strikeout');
+						return true;
+					case 70: // f
+						L.Socket.sendMessage('uno .uno:InsertFootnote');
+						return true;
+					case 67: // c
+					case 77: // m
+						L.Socket.sendMessage('uno .uno:InsertAnnotation');
+						return true;
+					case 68: // d
+						L.Socket.sendMessage('uno .uno:InsertEndnote');
+						return true;
+				}
+			}
+
+			return false;
+		}
 
 		switch (e.originalEvent.keyCode) {
-			case 13: // enter
-				L.Socket.sendMessage('uno .uno:InsertPagebreak');
-				break;
-			case 37: // left arrow
-				L.Socket.sendMessage('uno .uno:GoToPrevWord');
-				break;
-			case 39: // right arrow
-				L.Socket.sendMessage('uno .uno:GoToNextWord');
-				break;
-			case 65: // a
-				L.Socket.sendMessage('uno .uno:Selectall');
-				break;
-			case 66: // b
-				L.Socket.sendMessage('uno .uno:Bold');
-				break;
+			case 51: // 3
+				if (this._map.getDocType() === 'spreadsheet') {
+					L.Socket.sendMessage('uno .uno:SetOptimalColumnWidthDirect');
+					L.Socket.sendMessage('commandvalues command=.uno:ViewRowColumnHeaders');
+					return true;
+				}
+				return false;
+			case 53: // 5
+				if (this._map.getDocType() === 'spreadsheet') {
+					L.Socket.sendMessage('uno .uno:Strikeout');
+					return true;
+				}
+				return false;
 			case 67: // c
 				// we prepare for a copy event
 				this._map._docLayer._textArea.value = 'dummy text';
 				this._map._docLayer._textArea.focus();
 				this._map._docLayer._textArea.select();
-				break;
-			case 69: // e
-				L.Socket.sendMessage('uno .uno:CenterPara');
-				break;
-			case 73: // i
-				L.Socket.sendMessage('uno .uno:Italic');
-				break;
-			case 74: // j
-				L.Socket.sendMessage('uno .uno:JustifyPara');
-				break;
-			case 76: // l
-				L.Socket.sendMessage('uno .uno:LeftPara');
-				break;
+				return true;
 			case 80: // p
 				this._map.print();
-				break;
-			case 82: // r
-				L.Socket.sendMessage('uno .uno:RightPara');
-				break;
-			case 85: // u
-				L.Socket.sendMessage('uno .uno:Underline');
-				break;
-			case 90: // z
-				L.Socket.sendMessage('uno .uno:Undo');
-				break;
-			case 189: // -
-				L.Socket.sendMessage('uno .uno:InsertSoftHyphen');
-				break;
+				return true;
+			case 86: // v
+				return true;
+			case 188: // ,
+				L.Socket.sendMessage('uno .uno:SubScript');
+				return true;
+			case 190: // .
+				L.Socket.sendMessage('uno .uno:SuperScript');
+				return true;
 		}
-		if (e.originalEvent.keyCode !== 67 && e.originalEvent.keyCode !== 86) {
-			// not copy or paste
-			e.originalEvent.preventDefault();
+		if (e.type === 'keypress' && e.originalEvent.key === 'c' && e.originalEvent.ctrlKey) {
+			// need to handle this separately for Firefox
+			return true;
 		}
+		return false;
 	}
 });
 

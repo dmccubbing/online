@@ -2,15 +2,15 @@
  * L.Control.Tabs is used to swtich sheets in Calc
  */
 
+/* global $ */
 L.Control.Tabs = L.Control.extend({
 	onAdd: function (map) {
 		this._tabsInitialized = false;
 		this._spreadsheetTabs = {};
-		var docContainer = L.DomUtil.get('document-container');
+		var docContainer = map.options.documentContainer;
 		this._tabsCont = L.DomUtil.create('div', 'spreadsheet-tab', docContainer.parentElement);
 
 		map.on('updateparts', this._updateDisabled, this);
-		return document.createElement('div');
 	},
 
 	_updateDisabled: function (e) {
@@ -24,12 +24,13 @@ L.Control.Tabs = L.Control.extend({
 		if (docType === 'spreadsheet') {
 			if (!this._tabsInitialized) {
 				// make room for the preview
-				var docContainer = L.DomUtil.get('document-container');
-				L.DomUtil.setStyle(docContainer, 'bottom', '20px');
+				var docContainer = this._map.options.documentContainer;
+				L.DomUtil.addClass(docContainer, 'spreadsheet-document');
 				setTimeout(L.bind(function () {
 					this._map.invalidateSize();
 					$('.scroll-container').mCustomScrollbar('update');
-				}, this), 500);
+					$('.scroll-container').mCustomScrollbar('scrollTo', [0, 0]);
+				}, this), 100);
 				for (var i = 0; i < parts; i++) {
 					var id = 'spreadsheet-tab' + i;
 					var tab = L.DomUtil.create('li', '', this._tabsCont);

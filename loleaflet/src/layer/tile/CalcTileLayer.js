@@ -4,6 +4,12 @@
 
 L.CalcTileLayer = L.TileLayer.extend({
 
+	beforeAdd: function (map) {
+		map._addZoomLimit(this);
+		map.on('zoomend', this._onZoomRowColumns, this);
+		map.on('resize', this._onUpdateViewPort, this);
+	},
+
 	_onInvalidateTilesMsg: function (textMsg) {
 		var command = L.Socket.parseServerCmd(textMsg);
 		if (command.x === undefined || command.y === undefined || command.part === undefined) {
@@ -100,6 +106,30 @@ L.CalcTileLayer = L.TileLayer.extend({
 		}
 	},
 
+	_onZoomRowColumns: function () {
+		this._updateClientZoom();
+		if (this._clientZoom) {
+			L.Socket.sendMessage('clientzoom ' + this._clientZoom);
+			this._clientZoom = null;
+		}
+		L.Socket.sendMessage('commandvalues command=.uno:ViewRowColumnHeaders');
+	},
+
+	_onUpdateViewPort: function () {
+		var width = parseInt(L.DomUtil.getStyle(this._map._container, 'width'));
+		var height = parseInt(L.DomUtil.getStyle(this._map._container, 'height'));
+		this._map.fire('updateviewport', {
+			rows: {
+				totalHeight: this._docPixelSize.y,
+				viewPort: height
+			},
+			columns: {
+				totalWidth: this._docPixelSize.x,
+				viewPort: width
+			}
+		});
+	},
+
 	_onStatusMsg: function (textMsg) {
 		var command = L.Socket.parseServerCmd(textMsg);
 		if (command.width && command.height && this._documentInfo !== textMsg) {
@@ -126,6 +156,24 @@ L.CalcTileLayer = L.TileLayer.extend({
 				this._preFetchPart = this._selectedPart;
 				this._preFetchBorder = null;
 			}
+		}
+
+		// Force fetching of row/column headers
+		this._onZoomRowColumns();
+	},
+
+	_onCommandValuesMsg: function (textMsg) {
+		if (textMsg.match('.uno:ViewRowColumnHeaders')) {
+			var data = JSON.parse(textMsg.substring(textMsg.indexOf('{')));
+			this._map.fire('viewrowcolumnheaders', {
+				data: data,
+				converter: this._twipsToPixels,
+				context: this
+			});
+			this._onUpdateViewPort();
+		}
+		else {
+			L.TileLayer.prototype._onCommandValuesMsg.call(this, textMsg);
 		}
 	}
 });

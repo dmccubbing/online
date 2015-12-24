@@ -27,7 +27,6 @@
 #include <Poco/StringTokenizer.h>
 #include <Poco/Timestamp.h>
 #include <Poco/URI.h>
-#include <Poco/Util/Application.h>
 
 #include "LOOLWSD.hpp"
 #include "LOOLProtocol.hpp"
@@ -42,7 +41,6 @@ using Poco::StringTokenizer;
 using Poco::SyntaxException;
 using Poco::Timestamp;
 using Poco::URI;
-using Poco::Util::Application;
 
 using namespace LOOLProtocol;
 
@@ -108,7 +106,7 @@ void TileCache::saveTile(int part, int width, int height, int tilePosX, int tile
 
 std::string TileCache::getTextFile(std::string fileName)
 {
-    const char *textFile = std::string("/" + fileName).c_str();
+    const auto textFile = std::string("/" + fileName);
 
     std::string dirName = cacheDirName(false);
     if (_hasUnsavedChanges)
@@ -186,6 +184,35 @@ void TileCache::saveTextFile(const std::string& text, std::string fileName)
 
     textStream << text << std::endl;
     textStream.close();
+}
+
+void TileCache::saveRendering(const std::string& name, const std::string& dir, const char *data, size_t size)
+{
+    // can fonts be invalidated?
+    std::string dirName = cacheDirName(false) + "/" + dir;
+
+    File(dirName).createDirectories();
+
+    std::string fileName = dirName + "/" + name;
+
+    std::fstream outStream(fileName, std::ios::out);
+    outStream.write(data, size);
+    outStream.close();
+}
+
+std::unique_ptr<std::fstream> TileCache::lookupRendering(const std::string& name, const std::string& dir)
+{
+    std::string dirName = cacheDirName(false) + "/" + dir;
+    std::string fileName = dirName + "/" + name;
+    File directory(dirName);
+
+    if (directory.exists() && directory.isDirectory() && File(fileName).exists())
+    {
+        std::unique_ptr<std::fstream> result(new std::fstream(fileName, std::ios::in));
+        return result;
+    }
+
+    return nullptr;
 }
 
 void TileCache::invalidateTiles(int part, int x, int y, int width, int height)
@@ -355,7 +382,7 @@ void TileCache::setup(const std::string& timestamp)
         Timestamp::TimeVal lastTimeVal;
         std::istringstream(timestamp) >> lastTimeVal;
         lastModified = lastTimeVal;
-        Application::instance().logger().information(Util::logPrefix() + "Timestamp provided externally: " + timestamp);
+        Log::info("Timestamp provided externally: " + timestamp);
 
         cleanEverything = (getLastModified() < Timestamp(lastModified));
     }
@@ -372,7 +399,7 @@ void TileCache::setup(const std::string& timestamp)
         {
             // document changed externally, clean up everything
             cacheDir.remove(true);
-            Application::instance().logger().information(Util::logPrefix() + "Completely cleared cache: " + toplevelCacheDirName());
+            Log::info("Completely cleared cache: " + toplevelCacheDirName());
         }
         else
         {
@@ -381,7 +408,7 @@ void TileCache::setup(const std::string& timestamp)
             if (editingCacheDir.exists())
             {
                 editingCacheDir.remove(true);
-                Application::instance().logger().information(Util::logPrefix() + "Cleared the editing cache: " + cacheDirName(true));
+                Log::info("Cleared the editing cache: " + cacheDirName(true));
             }
         }
     }

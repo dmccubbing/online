@@ -13,18 +13,29 @@
 /config.log
 /config.status
 /configure
+/compile
 /depcomp
 /install-sh
 /missing
 /stamp-h1
+/systemplate
 /test-driver
+/jails
+/loolwsd.spec
 
 *.o
 *.exe
+cscope*
+.*
+*.orig
+
 connect
 lokitclient
 loadtest
 loolwsd
+loolkit
+loolbroker
+loolmap
 sockettransporttest
 
 # Debug output

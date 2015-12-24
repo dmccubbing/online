@@ -221,7 +221,8 @@ var deps = {
 	},
 
 	Mouse: {
-		src: ['map/handler/Map.Mouse.js'],
+		src: ['dom/DomEvent.MultiClick.js',
+		      'map/handler/Map.Mouse.js'],
 		desc: 'Handles mouse interaction with the document.'
 	},
 
@@ -279,6 +280,27 @@ var deps = {
 		      'control/Control.PartsPreview.js'],
 		heading: 'Controls',
 		desc: 'Parts preview sidebar'
+	},
+	
+	ControlPresentation: {
+		src: ['control/Control.js',
+		      'control/Control.Presentation.js'],
+		heading: 'Controls',
+		desc: 'Common commands for slides.'
+	},
+
+	ControlColumnHeader: {
+		src: ['control/Control.js',
+			  'control/Control.ColumnHeader.js'],
+		heading: 'Controls',
+		desc: 'Column Header bar'
+	},
+
+	ControlRowHeader: {
+		src: ['control/Control.js',
+			  'control/Control.RowHeader.js'],
+		heading: 'Controls',
+		desc: 'Row Header bar'
 	},
 
 	ControlTabs: {
@@ -342,6 +364,13 @@ var deps = {
 		      'control/Control.Fonts.js'],
 		heading: 'Controls',
 		desc: 'Handles fonts selection'
+	},
+
+	ControlFormulaBar: {
+		src: ['control/Control.js',
+		      'control/Control.Formulabar.js'],
+		heading: 'Controls',
+		desc: 'Handles the formula bar in calc'
 	},
 
 	ControlAttrib: {

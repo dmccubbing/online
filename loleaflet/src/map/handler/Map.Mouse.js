@@ -11,15 +11,16 @@ L.Map.Mouse = L.Handler.extend({
 	initialize: function (map) {
 		this._map = map;
 		this._mouseEventsQueue = [];
+		this._prevMousePos = null;
 	},
 
 	addHooks: function () {
-		this._map.on('mousedown mouseup mouseover mouseout mousemove dblclick',
+		this._map.on('mousedown mouseup mouseover mouseout mousemove dblclick trplclick qdrplclick',
 			this._onMouseEvent, this);
 	},
 
 	removeHooks: function () {
-		this._map.off('mousedown mouseup mouseover mouseout mousemove dblclick',
+		this._map.off('mousedown mouseup mouseover mouseout mousemove dblclick trplclick qdrplclick',
 			this._onMouseEvent, this);
 	},
 
@@ -40,8 +41,35 @@ L.Map.Mouse = L.Handler.extend({
 		if (!docLayer || (this._map.slideShow && this._map.slideShow.fullscreen)) {
 			return;
 		}
-		if (docLayer._graphicMarker && docLayer._graphicMarker.isDragged) {
-			return;
+		if (docLayer._graphicMarker) {
+			if (docLayer._graphicMarker.isDragged) {
+				return;
+			}
+			if (!docLayer._isEmptyRectangle(docLayer._graphicSelection) &&
+					docLayer._graphicMarker.getBounds().contains(e.latlng)) {
+				// if we have a graphic selection and the user clicks inside the rectangle
+				if (e.type === 'mousedown') {
+					this._prevMousePos = e.latlng;
+				}
+				else if (e.type === 'mousemove' && this._mouseDown && !this._prevMousePos) {
+					// if the user started to drag the shape before the selection
+					// has been drawn
+					this._prevMousePos = e.latlng;
+				}
+				else if (e.type === 'mousemove' && this._prevMousePos) {
+					// we have a graphic selection and the user started to drag it
+					var delta = L.latLng(e.latlng.lat - this._prevMousePos.lat, e.latlng.lng - this._prevMousePos.lng);
+					this._prevMousePos = e.latlng;
+					var oldSelectionCenter = docLayer._graphicMarker.getBounds().getCenter();
+					var newSelectionCenter = L.latLng(oldSelectionCenter.lat + delta.lat, oldSelectionCenter.lng + delta.lng);
+					if (docLayer._graphicMarker.editing) {
+						docLayer._graphicMarker.editing._move(newSelectionCenter);
+					}
+				}
+				else if (e.type === 'mouseup') {
+					this._prevMousePos = null;
+				}
+			}
 		}
 
 		for (var key in docLayer._selectionHandles) {
@@ -81,10 +109,22 @@ L.Map.Mouse = L.Handler.extend({
 			if (this._clickTime && Date.now() - this._clickTime <= 250) {
 				// double click, a click was sent already
 				this._mouseEventsQueue = [];
+				this._clickCount++;
+				if (this._clickCount < 4) {
+					// Reset the timer in order to keep resetting until
+					// we could have sent through a quadruple click. After this revert
+					// to normal behaviour so that a following single-click is treated
+					// as a separate click, in order to match LO desktop behaviour.
+					// (Clicking five times results in paragraph selection after 4 clicks,
+					// followed by resetting to a single cursor and no selection on the
+					// fifth click.)
+					this._clickTime = Date.now();
+				}
 				return;
 			}
 			else {
 				this._clickTime = Date.now();
+				this._clickCount = 1;
 				mousePos = docLayer._latLngToTwips(e.latlng);
 				var timeOut = 250;
 				if (docLayer._permission === 'edit') {
@@ -112,6 +152,8 @@ L.Map.Mouse = L.Handler.extend({
 					}
 				}
 			}
+
+			this._map.fire('scrollvelocity', {vx: 0, vy: 0});
 		}
 		else if (e.type === 'mousemove' && this._mouseDown) {
 			if (this._holdMouseEvent) {
@@ -132,20 +174,36 @@ L.Map.Mouse = L.Handler.extend({
 			if (!this._map.dragging.enabled()) {
 				mousePos = docLayer._latLngToTwips(e.latlng);
 				docLayer._postMouseEvent('move', mousePos.x, mousePos.y, 1, buttons, modifier);
+
 				for (key in docLayer._selectionHandles) {
 					handle = docLayer._selectionHandles[key];
 					if (handle._icon) {
 						L.DomUtil.addClass(handle._icon, 'leaflet-not-clickable');
 					}
 				}
+
+				this._map.fire('handleautoscroll', {pos: e.containerPoint, map: this._map});
 			}
 		}
-		else if (e.type === 'dblclick') {
+		else if (e.type === 'mousemove' && !this._mouseDown) {
+			clearTimeout(this._mouseOverTimeout);
 			mousePos = docLayer._latLngToTwips(e.latlng);
-			docLayer._postMouseEvent('buttondown', mousePos.x, mousePos.y, 1, buttons, modifier);
-			docLayer._postMouseEvent('buttondown', mousePos.x, mousePos.y, 2, buttons, modifier);
-			docLayer._postMouseEvent('buttonup', mousePos.x, mousePos.y, 2, 1, buttons, modifier);
-			docLayer._postMouseEvent('buttonup', mousePos.x, mousePos.y, 1, 1, buttons, modifier);
+			this._mouseOverTimeout = setTimeout(L.bind(function() {
+				docLayer._postMouseEvent('move', mousePos.x, mousePos.y, 1, 0, modifier);
+			  }, this),
+			  100);
+		}
+		else if (e.type === 'dblclick' || e.type === 'trplclick' || e.type === 'qdrplclick') {
+			mousePos = docLayer._latLngToTwips(e.latlng);
+			var clicks = {
+				dblclick: 2,
+				trplclick: 3,
+				qdrplclick: 4
+			};
+			var count = clicks[e.type];
+
+			docLayer._postMouseEvent('buttondown', mousePos.x, mousePos.y, count, buttons, modifier);
+			docLayer._postMouseEvent('buttonup', mousePos.x, mousePos.y, count, buttons, modifier);
 		}
 	},
 

@@ -13,12 +13,18 @@ L.Map = L.Evented.extend({
 		fadeAnimation: true,
 		trackResize: true,
 		markerZoomAnimation: true,
-		edit: false,
-		readonly: false
+		defaultZoom: 10,
+		tileWidthTwips: 3000,
+		tileHeightTwips: 3000
 	},
 
 	initialize: function (id, options) { // (HTMLElement or String, Object)
 		options = L.setOptions(this, options);
+
+		if (this.options.documentContainer) {
+			// have it as DOM object
+			this.options.documentContainer = L.DomUtil.get(this.options.documentContainer);
+		}
 
 		this._initContainer(id);
 		this._initLayout();
@@ -53,6 +59,10 @@ L.Map = L.Evented.extend({
 		}
 		this._addLayers(this.options.layers);
 		L.Socket.connect(this);
+
+		// Inhibit the context menu - the browser thinks that the document
+		// is just a bunch of images, hence the context menu is useless (tdf#94599)
+		this.on('contextmenu', function() {});
 	},
 
 
@@ -69,6 +79,11 @@ L.Map = L.Evented.extend({
 		if (!this._loaded) {
 			this._zoom = this._limitZoom(zoom);
 			return this;
+		}
+		if (this._docLayer && this._docLayer._docType === 'spreadsheet') {
+			// for spreadsheets, when the document is smaller than the viewing area
+			// we want it to be glued to the row/column headers instead of being centered
+			this._docLayer._checkSpreadSheetBounds(zoom);
 		}
 		return this.setView(this.getCenter(), zoom, {zoom: options});
 	},
@@ -455,7 +470,8 @@ L.Map = L.Evented.extend({
 		var textAreaContainer = L.DomUtil.create('div', 'clipboard-container', container.parentElement);
 		this._textArea = L.DomUtil.create('textarea', 'clipboard', textAreaContainer);
 		this._resizeDetector = L.DomUtil.create('iframe', 'resize-detector', container);
-		this._fileDownloader = L.DomUtil.create('iframe', 'resize-detector', container);
+		this._fileDownloader = L.DomUtil.create('iframe', '', container);
+		L.DomUtil.setStyle(this._fileDownloader, 'display', 'none');
 
 		container._leaflet = true;
 	},
@@ -573,8 +589,8 @@ L.Map = L.Evented.extend({
 		var onOff = remove ? 'off' : 'on';
 
 		L.DomEvent[onOff](this._container, 'click dblclick mousedown mouseup ' +
-			'mouseover mouseout mousemove contextmenu keydown keypress keyup', this._handleDOMEvent, this);
-		L.DomEvent[onOff](this._textArea, 'copy keydown keypress keyup', this._handleDOMEvent, this);
+			'mouseover mouseout mousemove contextmenu keydown keypress keyup trplclick qdrplclick', this._handleDOMEvent, this);
+		L.DomEvent[onOff](this._textArea, 'copy paste keydown keypress keyup', this._handleDOMEvent, this);
 
 		if (this.options.trackResize) {
 			L.DomEvent[onOff](this._resizeDetector.contentWindow, 'resize', this._onResize, this);
@@ -627,7 +643,7 @@ L.Map = L.Evented.extend({
 		var data = {
 			originalEvent: e
 		};
-		if (e.type !== 'keypress' && e.type !== 'keyup' && e.type !== 'keydown' && e.type !== 'copy') {
+		if (e.type !== 'keypress' && e.type !== 'keyup' && e.type !== 'keydown' && e.type !== 'copy' && e.type !== 'paste') {
 			data.containerPoint = target instanceof L.Marker ?
 					this.latLngToContainerPoint(target.getLatLng()) : this.mouseEventToContainerPoint(e);
 			data.layerPoint = this.containerPointToLayerPoint(data.containerPoint);

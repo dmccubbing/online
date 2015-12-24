@@ -2,11 +2,11 @@
  * L.Control.Dialog used for displaying alerts
  */
 
+/* global vex */
 L.Control.Dialog = L.Control.extend({
 	onAdd: function (map) {
 		map.on('error', this._onError, this);
 		map.on('print', this._onPrint, this);
-		return document.createElement('div');
 	},
 
 	_onError: function (e) {

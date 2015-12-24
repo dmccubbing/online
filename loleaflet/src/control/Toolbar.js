@@ -77,16 +77,36 @@ L.Map.include({
 		}
 	},
 
+	sendUnoCommand: function (command, json) {
+		if (this._docLayer._permission === 'edit') {
+			L.Socket.sendMessage('uno ' + command + (json ? ' ' + JSON.stringify(json) : ''));
+		}
+	},
+
 	toggleCommandState: function (unoState) {
 		if (this._docLayer._permission === 'edit') {
 			if (!unoState.startsWith('.uno:')) {
 				unoState = '.uno:' + unoState;
 			}
-			L.Socket.sendMessage('uno ' + unoState);
+			this.sendUnoCommand(unoState);
 		}
 	},
 
 	insertFile: function (file) {
 		this.fire('insertfile', {file: file});
+	},
+
+	cellEnterString: function (string) {
+		var command = {
+			'StringName': {
+				type: 'string',
+				value: string
+			}
+		};
+		L.Socket.sendMessage('uno .uno:EnterString ' + JSON.stringify(command));
+	},
+
+	renderFont: function (fontName) {
+		L.Socket.sendMessage('renderfont font=' + window.encodeURIComponent(fontName));
 	}
 });
